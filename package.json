@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-lighter",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "n8n community node for Lighter (zkLighter) - A high-performance perpetuals DEX",
 	"keywords": [
 		"n8n-community-node-package",
@@ -17,7 +17,7 @@
 	"homepage": "https://github.com/maxwellmelo/n8n-nodes-lighter",
 	"author": {
 		"name": "Maxwell Melo",
-		"email": "maxwell@example.com"
+		"email": "maxwell.melo0@gmail.com"
 	},
 	"repository": {
 		"type": "git",
