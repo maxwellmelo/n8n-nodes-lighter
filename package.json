@@ -14,14 +14,14 @@
 		"defi"
 	],
 	"license": "MIT",
-	"homepage": "https://github.com/maxwellwynter/n8n-nodes-lighter",
+	"homepage": "https://github.com/maxwellmelo/n8n-nodes-lighter",
 	"author": {
-		"name": "Maxwell Wynter",
+		"name": "Maxwell Melo",
 		"email": "maxwell@example.com"
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/maxwellwynter/n8n-nodes-lighter.git"
+		"url": "https://github.com/maxwellmelo/n8n-nodes-lighter.git"
 	},
 	"engines": {
 		"node": ">=18.10",
