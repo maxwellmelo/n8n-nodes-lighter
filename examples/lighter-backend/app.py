@@ -30,8 +30,7 @@ from functools import wraps
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -85,6 +84,7 @@ def get_order_api():
     global _order_api
     if _order_api is None:
         import zklighter
+
         api_client = zklighter.ApiClient(
             configuration=zklighter.Configuration(host=BASE_URL)
         )
@@ -97,6 +97,7 @@ def get_account_api():
     global _account_api
     if _account_api is None:
         import zklighter
+
         api_client = zklighter.ApiClient(
             configuration=zklighter.Configuration(host=BASE_URL)
         )
@@ -106,14 +107,17 @@ def get_account_api():
 
 def async_route(f):
     """Decorator for async routes."""
+
     @wraps(f)
     def wrapper(*args, **kwargs):
         return asyncio.run(f(*args, **kwargs))
+
     return wrapper
 
 
 def require_auth(f):
     """Decorator to require API_SECRET authentication."""
+
     @wraps(f)
     def wrapper(*args, **kwargs):
         if API_SECRET:
@@ -121,29 +125,34 @@ def require_auth(f):
             if auth_header != API_SECRET:
                 return jsonify({"error": "Unauthorized"}), 401
         return f(*args, **kwargs)
+
     return wrapper
 
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({
-        "status": "ok",
-        "environment": LIGHTER_ENVIRONMENT,
-        "account_index": LIGHTER_ACCOUNT_INDEX,
-        "base_url": BASE_URL,
-        "timestamp": int(time.time() * 1000),
-    })
+    return jsonify(
+        {
+            "status": "ok",
+            "environment": LIGHTER_ENVIRONMENT,
+            "account_index": LIGHTER_ACCOUNT_INDEX,
+            "base_url": BASE_URL,
+            "timestamp": int(time.time() * 1000),
+        }
+    )
 
 
 @app.route("/api/info", methods=["GET"])
 def get_info():
-    return jsonify({
-        "environment": LIGHTER_ENVIRONMENT,
-        "account_index": LIGHTER_ACCOUNT_INDEX,
-        "api_key_index": LIGHTER_API_KEY_INDEX,
-        "base_url": BASE_URL,
-        "auth_required": bool(API_SECRET),
-    })
+    return jsonify(
+        {
+            "environment": LIGHTER_ENVIRONMENT,
+            "account_index": LIGHTER_ACCOUNT_INDEX,
+            "api_key_index": LIGHTER_API_KEY_INDEX,
+            "base_url": BASE_URL,
+            "auth_required": bool(API_SECRET),
+        }
+    )
 
 
 @app.route("/api/order/limit", methods=["POST"])
@@ -175,7 +184,8 @@ async def create_limit_order():
         price_int = int(price * 100)
 
         time_in_force = (
-            client.ORDER_TIME_IN_FORCE_POST_ONLY if post_only
+            client.ORDER_TIME_IN_FORCE_POST_ONLY
+            if post_only
             else client.ORDER_TIME_IN_FORCE_GOOD_TILL_TIME
         )
 
@@ -193,17 +203,19 @@ async def create_limit_order():
         if err:
             return jsonify({"success": False, "error": err}), 400
 
-        return jsonify({
-            "success": True,
-            "tx_hash": response.tx_hash if response else None,
-            "order": {
-                "market_index": market_index,
-                "side": side,
-                "size": size,
-                "price": price,
-                "type": "limit",
-            },
-        })
+        return jsonify(
+            {
+                "success": True,
+                "tx_hash": response.tx_hash if response else None,
+                "order": {
+                    "market_index": market_index,
+                    "side": side,
+                    "size": size,
+                    "price": price,
+                    "type": "limit",
+                },
+            }
+        )
 
     except Exception as e:
         logger.exception("Error creating limit order")
@@ -232,10 +244,12 @@ async def create_market_order():
         if size <= 0:
             return jsonify({"error": "size must be > 0"}), 400
 
-        orderbook = await order_api.order_book_orders(market_index=market_index, limit=1)
-        
+        orderbook = await order_api.order_book_orders(
+            market_index=market_index, limit=1
+        )
+
         is_ask = side == "sell"
-        
+
         if is_ask and orderbook.bids:
             current_price = float(orderbook.bids[0].price)
         elif not is_ask and orderbook.asks:
@@ -258,4 +272,366 @@ async def create_market_order():
             order_type=client.ORDER_TYPE_MARKET,
             time_in_force=client.ORDER_TIME_IN_FORCE_IMMEDIATE_OR_CANCEL,
             reduce_only=reduce_only,
-       
+            order_expiry=client.DEFAULT_IOC_EXPIRY,
+        )
+
+        if err:
+            return jsonify({"success": False, "error": err}), 400
+
+        return jsonify(
+            {
+                "success": True,
+                "tx_hash": response.tx_hash if response else None,
+                "order": {
+                    "market_index": market_index,
+                    "side": side,
+                    "size": size,
+                    "execution_price": execution_price,
+                    "type": "market",
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.exception("Error creating market order")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/order/cancel", methods=["POST"])
+@require_auth
+@async_route
+async def cancel_order():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSON body required"}), 400
+
+        client = get_client()
+
+        market_index = int(data.get("market_index", 0))
+        order_index = int(data.get("order_index", 0))
+
+        if order_index <= 0:
+            return jsonify({"error": "order_index is required"}), 400
+
+        tx, response, err = await client.cancel_order(
+            market_index=market_index,
+            order_index=order_index,
+        )
+
+        if err:
+            return jsonify({"success": False, "error": err}), 400
+
+        return jsonify(
+            {
+                "success": True,
+                "tx_hash": response.tx_hash if response else None,
+                "cancelled": {"market_index": market_index, "order_index": order_index},
+            }
+        )
+
+    except Exception as e:
+        logger.exception("Error cancelling order")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/order/cancel-all", methods=["POST"])
+@require_auth
+@async_route
+async def cancel_all_orders():
+    try:
+        data = request.get_json() or {}
+        client = get_client()
+        order_api = get_order_api()
+
+        market_index = data.get("market_index")
+
+        active_orders = await order_api.account_active_orders(
+            account_index=LIGHTER_ACCOUNT_INDEX,
+            market_id=market_index if market_index is not None else -1,
+        )
+
+        orders = active_orders.orders or []
+        if not orders:
+            return jsonify(
+                {
+                    "success": True,
+                    "message": "No orders to cancel",
+                    "cancelled_count": 0,
+                }
+            )
+
+        cancelled = []
+        errors = []
+
+        for order in orders:
+            try:
+                _, response, err = await client.cancel_order(
+                    market_index=getattr(order, "market_index", market_index or 0),
+                    order_index=order.order_index,
+                )
+                if err:
+                    errors.append({"order_index": order.order_index, "error": err})
+                else:
+                    cancelled.append(order.order_index)
+            except Exception as e:
+                errors.append({"order_index": order.order_index, "error": str(e)})
+
+        return jsonify(
+            {
+                "success": len(errors) == 0,
+                "cancelled_count": len(cancelled),
+                "cancelled_orders": cancelled,
+                "errors": errors if errors else None,
+            }
+        )
+
+    except Exception as e:
+        logger.exception("Error cancelling all orders")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/position/close", methods=["POST"])
+@require_auth
+@async_route
+async def close_position():
+    try:
+        data = request.get_json() or {}
+        client = get_client()
+        account_api = get_account_api()
+        order_api = get_order_api()
+
+        market_index = int(data.get("market_index", 0))
+        slippage = float(data.get("slippage", 0.5)) / 100
+
+        account = await account_api.account(by="index", value=LIGHTER_ACCOUNT_INDEX)
+
+        position = None
+        positions = account.positions or []
+        for p in positions:
+            p_market = getattr(p, "market_index", getattr(p, "market_id", None))
+            if p_market == market_index:
+                position = p
+                break
+
+        if not position:
+            return jsonify(
+                {
+                    "success": True,
+                    "message": "No position to close",
+                    "market_index": market_index,
+                }
+            )
+
+        position_size = abs(
+            float(getattr(position, "position", getattr(position, "size", 0)))
+        )
+        is_long = getattr(position, "sign", 0) > 0
+
+        if position_size <= 0:
+            return jsonify({"success": True, "message": "Position already closed"})
+
+        orderbook = await order_api.order_book_orders(
+            market_index=market_index, limit=1
+        )
+
+        is_ask = is_long
+
+        if is_ask and orderbook.bids:
+            current_price = float(orderbook.bids[0].price)
+        elif not is_ask and orderbook.asks:
+            current_price = float(orderbook.asks[0].price)
+        else:
+            return jsonify({"error": "Could not get price for close"}), 400
+
+        slippage_multiplier = (1 - slippage) if is_ask else (1 + slippage)
+        execution_price = current_price * slippage_multiplier
+
+        base_amount = int(position_size * 10000)
+        price_int = int(execution_price * 100)
+
+        tx, response, err = await client.create_order(
+            market_index=market_index,
+            client_order_index=int(time.time() * 1000),
+            base_amount=base_amount,
+            price=price_int,
+            is_ask=is_ask,
+            order_type=client.ORDER_TYPE_MARKET,
+            time_in_force=client.ORDER_TIME_IN_FORCE_IMMEDIATE_OR_CANCEL,
+            reduce_only=True,
+            order_expiry=client.DEFAULT_IOC_EXPIRY,
+        )
+
+        if err:
+            return jsonify({"success": False, "error": err}), 400
+
+        return jsonify(
+            {
+                "success": True,
+                "tx_hash": response.tx_hash if response else None,
+                "closed_position": {
+                    "market_index": market_index,
+                    "size": position_size,
+                    "side": "long" if is_long else "short",
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.exception("Error closing position")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/position/update-leverage", methods=["POST"])
+@require_auth
+@async_route
+async def update_leverage():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSON body required"}), 400
+
+        client = get_client()
+
+        market_index = int(data.get("market_index", 0))
+        leverage = int(data.get("leverage", 10))
+        margin_mode = data.get("margin_mode", "cross").lower()
+
+        if leverage < 1 or leverage > 100:
+            return jsonify({"error": "leverage must be between 1 and 100"}), 400
+
+        fraction = leverage * 100
+        mode = (
+            client.CROSS_MARGIN_MODE
+            if margin_mode == "cross"
+            else client.ISOLATED_MARGIN_MODE
+        )
+
+        tx, response, err = await client.update_leverage(
+            market_index=market_index,
+            fraction=fraction,
+            margin_mode=mode,
+        )
+
+        if err:
+            return jsonify({"success": False, "error": err}), 400
+
+        return jsonify(
+            {
+                "success": True,
+                "tx_hash": response.tx_hash if response else None,
+                "leverage": {
+                    "market_index": market_index,
+                    "leverage": leverage,
+                    "margin_mode": margin_mode,
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.exception("Error updating leverage")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/account", methods=["GET"])
+@require_auth
+@async_route
+async def get_account():
+    try:
+        account_api = get_account_api()
+        account = await account_api.account(by="index", value=LIGHTER_ACCOUNT_INDEX)
+        return jsonify(account.model_dump())
+    except Exception as e:
+        logger.exception("Error getting account")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/positions", methods=["GET"])
+@require_auth
+@async_route
+async def get_positions():
+    try:
+        account_api = get_account_api()
+        account = await account_api.account(by="index", value=LIGHTER_ACCOUNT_INDEX)
+
+        positions = []
+        for p in account.positions or []:
+            pos_size = float(getattr(p, "position", getattr(p, "size", 0)))
+            if pos_size != 0:
+                positions.append(
+                    {
+                        "market_index": getattr(
+                            p, "market_index", getattr(p, "market_id", 0)
+                        ),
+                        "size": abs(pos_size),
+                        "side": "long" if pos_size > 0 else "short",
+                    }
+                )
+
+        return jsonify({"positions": positions, "count": len(positions)})
+    except Exception as e:
+        logger.exception("Error getting positions")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/orders", methods=["GET"])
+@require_auth
+@async_route
+async def get_orders():
+    try:
+        order_api = get_order_api()
+        market_index = request.args.get("market_index", type=int, default=-1)
+
+        active_orders = await order_api.account_active_orders(
+            account_index=LIGHTER_ACCOUNT_INDEX,
+            market_id=market_index,
+        )
+
+        orders = []
+        for o in active_orders.orders or []:
+            orders.append(
+                {
+                    "order_index": o.order_index,
+                    "market_index": getattr(o, "market_index", 0),
+                    "side": "sell" if getattr(o, "is_ask", False) else "buy",
+                    "size": float(
+                        getattr(o, "remaining_base_amount", o.initial_base_amount)
+                    ),
+                    "price": float(o.price),
+                }
+            )
+
+        return jsonify({"orders": orders, "count": len(orders)})
+    except Exception as e:
+        logger.exception("Error getting orders")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auth-token", methods=["GET"])
+@require_auth
+def get_auth_token():
+    try:
+        client = get_client()
+        expiry = request.args.get("expiry", type=int, default=3600)
+
+        token, err = client.create_auth_token_with_expiry(expiry)
+
+        if err:
+            return jsonify({"error": err}), 400
+
+        return jsonify({"token": token, "expires_in": expiry})
+    except Exception as e:
+        logger.exception("Error generating auth token")
+        return jsonify({"error": str(e)}), 500
+
+
+if __name__ == "__main__":
+    if not LIGHTER_API_KEY:
+        print("WARNING: LIGHTER_API_KEY not configured!")
+
+    print(f"\nLighter Trading Backend")
+    print(f"Environment: {LIGHTER_ENVIRONMENT}")
+    print(f"Account Index: {LIGHTER_ACCOUNT_INDEX}")
+    print(f"Port: {FLASK_PORT}\n")
+
+    app.run(host="0.0.0.0", port=FLASK_PORT, debug=False)
