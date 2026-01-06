@@ -51,8 +51,7 @@ export class LighterApi implements ICredentialType {
 				password: true,
 			},
 			default: '',
-			required: true,
-			description: 'Your Lighter API private key for signing transactions',
+			description: 'Your Lighter API private key for signing transactions. Required for trading operations via backend.',
 		},
 		{
 			displayName: 'Auth Token',
@@ -64,6 +63,25 @@ export class LighterApi implements ICredentialType {
 			default: '',
 			description: 'Pre-generated auth token for API requests. If empty, public endpoints will be used.',
 			hint: 'Generate using the SDK: client.create_auth_token_with_expiry()',
+		},
+		{
+			displayName: 'Trading Backend URL',
+			name: 'tradingBackendUrl',
+			type: 'string',
+			default: '',
+			placeholder: 'http://localhost:3001',
+			description: 'URL of the Lighter Trading Backend for order execution. Required for trading operations (create/cancel orders, close positions).',
+			hint: 'Deploy the lighter-backend from the examples folder or use Docker',
+		},
+		{
+			displayName: 'Backend API Secret',
+			name: 'backendApiSecret',
+			type: 'string',
+			typeOptions: {
+				password: true,
+			},
+			default: '',
+			description: 'Optional API secret for authenticating with the trading backend',
 		},
 		{
 			displayName: 'L1 Address (Optional)',

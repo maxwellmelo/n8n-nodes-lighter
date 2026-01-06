@@ -49,8 +49,17 @@ export class Lighter implements INodeType {
 						value: 'order',
 					},
 					{
+						name: 'Position',
+						value: 'position',
+					},
+					{
 						name: 'Trade',
 						value: 'trade',
+					},
+					{
+						name: 'Trading',
+						value: 'trading',
+						description: 'Execute trades via Trading Backend (requires backend URL)',
 					},
 					{
 						name: 'Transaction',
@@ -336,6 +345,245 @@ export class Lighter implements INodeType {
 				},
 				default: -1,
 				description: 'Filter by market index (-1 for all markets)',
+			},
+
+			// ==================== TRADING OPERATIONS (via Backend) ====================
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+					},
+				},
+				options: [
+					{
+						name: 'Create Limit Order',
+						value: 'createLimitOrder',
+						description: 'Create a limit order',
+						action: 'Create limit order',
+					},
+					{
+						name: 'Create Market Order',
+						value: 'createMarketOrder',
+						description: 'Create a market order',
+						action: 'Create market order',
+					},
+					{
+						name: 'Cancel Order',
+						value: 'cancelOrder',
+						description: 'Cancel a specific order',
+						action: 'Cancel order',
+					},
+					{
+						name: 'Cancel All Orders',
+						value: 'cancelAllOrders',
+						description: 'Cancel all open orders',
+						action: 'Cancel all orders',
+					},
+					{
+						name: 'Close Position',
+						value: 'closePosition',
+						description: 'Close an open position with market order',
+						action: 'Close position',
+					},
+					{
+						name: 'Update Leverage',
+						value: 'updateLeverage',
+						description: 'Update leverage for a market',
+						action: 'Update leverage',
+					},
+				],
+				default: 'createLimitOrder',
+			},
+
+			// Trading Parameters - Market Index
+			{
+				displayName: 'Market Index',
+				name: 'tradingMarketIndex',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+					},
+				},
+				default: 0,
+				description: 'Market index (0=ETH, 1=BTC, 2=SOL, etc.)',
+			},
+
+			// Trading Parameters - Side
+			{
+				displayName: 'Side',
+				name: 'tradingSide',
+				type: 'options',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['createLimitOrder', 'createMarketOrder'],
+					},
+				},
+				options: [
+					{ name: 'Buy / Long', value: 'buy' },
+					{ name: 'Sell / Short', value: 'sell' },
+				],
+				default: 'buy',
+			},
+
+			// Trading Parameters - Size
+			{
+				displayName: 'Size',
+				name: 'tradingSize',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['createLimitOrder', 'createMarketOrder'],
+					},
+				},
+				default: 0.01,
+				typeOptions: { minValue: 0, numberPrecision: 4 },
+				description: 'Order size in base asset',
+			},
+
+			// Trading Parameters - Price
+			{
+				displayName: 'Price',
+				name: 'tradingPrice',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['createLimitOrder'],
+					},
+				},
+				default: 0,
+				typeOptions: { numberPrecision: 2 },
+				description: 'Limit price for the order',
+			},
+
+			// Trading Parameters - Slippage
+			{
+				displayName: 'Slippage %',
+				name: 'tradingSlippage',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['createMarketOrder', 'closePosition'],
+					},
+				},
+				default: 0.5,
+				typeOptions: { minValue: 0.1, maxValue: 10 },
+				description: 'Maximum slippage tolerance percentage',
+			},
+
+			// Trading Parameters - Reduce Only
+			{
+				displayName: 'Reduce Only',
+				name: 'tradingReduceOnly',
+				type: 'boolean',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['createLimitOrder', 'createMarketOrder'],
+					},
+				},
+				default: false,
+				description: 'Whether order can only reduce an existing position',
+			},
+
+			// Trading Parameters - Post Only
+			{
+				displayName: 'Post Only',
+				name: 'tradingPostOnly',
+				type: 'boolean',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['createLimitOrder'],
+					},
+				},
+				default: false,
+				description: 'Whether order should be maker only',
+			},
+
+			// Trading Parameters - Order Index
+			{
+				displayName: 'Order Index',
+				name: 'tradingOrderIndex',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['cancelOrder'],
+					},
+				},
+				default: 0,
+				description: 'The order index to cancel',
+			},
+
+			// Trading Parameters - Leverage
+			{
+				displayName: 'Leverage',
+				name: 'tradingLeverage',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['updateLeverage'],
+					},
+				},
+				default: 10,
+				typeOptions: { minValue: 1, maxValue: 100 },
+				description: 'Leverage multiplier (1-100x)',
+			},
+
+			// Trading Parameters - Margin Mode
+			{
+				displayName: 'Margin Mode',
+				name: 'tradingMarginMode',
+				type: 'options',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['updateLeverage'],
+					},
+				},
+				options: [
+					{ name: 'Cross', value: 'cross' },
+					{ name: 'Isolated', value: 'isolated' },
+				],
+				default: 'cross',
+			},
+
+			// ==================== POSITION OPERATIONS ====================
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['position'],
+					},
+				},
+				options: [
+					{
+						name: 'Get Positions',
+						value: 'getPositions',
+						description: 'Get open positions from backend',
+						action: 'Get positions',
+					},
+					{
+						name: 'Get Orders',
+						value: 'getOrders',
+						description: 'Get active orders from backend',
+						action: 'Get orders',
+					},
+				],
+				default: 'getPositions',
 			},
 
 			// ==================== TRADE OPERATIONS ====================
@@ -717,7 +965,125 @@ export class Lighter implements INodeType {
 					}
 				}
 
-				// Make the request
+				// ==================== TRADING (via Backend) ====================
+				else if (resource === 'trading') {
+					const backendUrl = credentials.tradingBackendUrl as string;
+					if (!backendUrl) {
+						throw new NodeApiError(this.getNode(), {
+							message: 'Trading Backend URL is required for trading operations. Configure it in credentials.',
+						});
+					}
+
+					const backendHeaders: IDataObject = {
+						'Content-Type': 'application/json',
+					};
+					if (credentials.backendApiSecret) {
+						backendHeaders['X-API-Secret'] = credentials.backendApiSecret as string;
+					}
+
+					let backendEndpoint = '';
+					let backendBody: IDataObject = {};
+					const marketIndex = this.getNodeParameter('tradingMarketIndex', i) as number;
+
+					if (operation === 'createLimitOrder') {
+						backendEndpoint = '/api/order/limit';
+						backendBody = {
+							market_index: marketIndex,
+							side: this.getNodeParameter('tradingSide', i) as string,
+							size: this.getNodeParameter('tradingSize', i) as number,
+							price: this.getNodeParameter('tradingPrice', i) as number,
+							reduce_only: this.getNodeParameter('tradingReduceOnly', i) as boolean,
+							post_only: this.getNodeParameter('tradingPostOnly', i) as boolean,
+						};
+					} else if (operation === 'createMarketOrder') {
+						backendEndpoint = '/api/order/market';
+						backendBody = {
+							market_index: marketIndex,
+							side: this.getNodeParameter('tradingSide', i) as string,
+							size: this.getNodeParameter('tradingSize', i) as number,
+							slippage: this.getNodeParameter('tradingSlippage', i) as number,
+							reduce_only: this.getNodeParameter('tradingReduceOnly', i) as boolean,
+						};
+					} else if (operation === 'cancelOrder') {
+						backendEndpoint = '/api/order/cancel';
+						backendBody = {
+							market_index: marketIndex,
+							order_index: this.getNodeParameter('tradingOrderIndex', i) as number,
+						};
+					} else if (operation === 'cancelAllOrders') {
+						backendEndpoint = '/api/order/cancel-all';
+						backendBody = {
+							market_index: marketIndex >= 0 ? marketIndex : undefined,
+						};
+					} else if (operation === 'closePosition') {
+						backendEndpoint = '/api/position/close';
+						backendBody = {
+							market_index: marketIndex,
+							slippage: this.getNodeParameter('tradingSlippage', i) as number,
+						};
+					} else if (operation === 'updateLeverage') {
+						backendEndpoint = '/api/position/update-leverage';
+						backendBody = {
+							market_index: marketIndex,
+							leverage: this.getNodeParameter('tradingLeverage', i) as number,
+							margin_mode: this.getNodeParameter('tradingMarginMode', i) as string,
+						};
+					}
+
+					const backendResponse = await this.helpers.request({
+						method: 'POST',
+						url: `${backendUrl}${backendEndpoint}`,
+						headers: backendHeaders,
+						body: backendBody,
+						json: true,
+					});
+
+					returnData.push({
+						json: backendResponse as IDataObject,
+						pairedItem: { item: i },
+					});
+					continue;
+				}
+
+				// ==================== POSITION (via Backend) ====================
+				else if (resource === 'position') {
+					const backendUrl = credentials.tradingBackendUrl as string;
+					if (!backendUrl) {
+						throw new NodeApiError(this.getNode(), {
+							message: 'Trading Backend URL is required for position operations. Configure it in credentials.',
+						});
+					}
+
+					const backendHeaders: IDataObject = {
+						'Content-Type': 'application/json',
+					};
+					if (credentials.backendApiSecret) {
+						backendHeaders['X-API-Secret'] = credentials.backendApiSecret as string;
+					}
+
+					let backendEndpoint = '';
+
+					if (operation === 'getPositions') {
+						backendEndpoint = '/api/positions';
+					} else if (operation === 'getOrders') {
+						backendEndpoint = '/api/orders';
+					}
+
+					const backendResponse = await this.helpers.request({
+						method: 'GET',
+						url: `${backendUrl}${backendEndpoint}`,
+						headers: backendHeaders,
+						json: true,
+					});
+
+					returnData.push({
+						json: backendResponse as IDataObject,
+						pairedItem: { item: i },
+					});
+					continue;
+				}
+
+				// Make the request (for non-backend operations)
 				const requestOptions: IDataObject = {
 					method,
 					url: `${baseUrl}${endpoint}`,
