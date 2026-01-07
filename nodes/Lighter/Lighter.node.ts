@@ -16,7 +16,8 @@ export class Lighter implements INodeType {
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
-		description: 'Interact with Lighter (zkLighter) DEX API - High-performance perpetuals trading',
+		description:
+			'Interact with Lighter (zkLighter) DEX API - High-performance perpetuals trading',
 		defaults: {
 			name: 'Lighter',
 		},
@@ -112,7 +113,8 @@ export class Lighter implements INodeType {
 					{
 						name: 'Get PnL',
 						value: 'getPnl',
-						description: 'Get profit and loss data',
+						description:
+							'Get profit and loss chart data (requires auth token for main accounts)',
 						action: 'Get PnL',
 					},
 					{
@@ -124,7 +126,8 @@ export class Lighter implements INodeType {
 					{
 						name: 'Get Position Funding',
 						value: 'getPositionFunding',
-						description: 'Get position funding data',
+						description:
+							'Get position funding history (requires auth token for main accounts)',
 						action: 'Get position funding',
 					},
 					{
@@ -173,7 +176,16 @@ export class Lighter implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['account'],
-						operation: ['getAccount', 'getAccountLimits', 'getAccountMetadata', 'getPnl', 'getLiquidations', 'getPositionFunding', 'getApiKeys', 'getNextNonce'],
+						operation: [
+							'getAccount',
+							'getAccountLimits',
+							'getAccountMetadata',
+							'getPnl',
+							'getLiquidations',
+							'getPositionFunding',
+							'getApiKeys',
+							'getNextNonce',
+						],
 					},
 				},
 				default: 0,
@@ -204,6 +216,88 @@ export class Lighter implements INodeType {
 				},
 				default: 3,
 				description: 'The API key index (3-254)',
+			},
+			{
+				displayName: 'Resolution',
+				name: 'pnlResolution',
+				type: 'options',
+				displayOptions: {
+					show: {
+						resource: ['account'],
+						operation: ['getPnl'],
+					},
+				},
+				options: [
+					{ name: '1 Hour', value: '1h' },
+					{ name: '1 Day', value: '1d' },
+				],
+				default: '1h',
+				description: 'Time resolution for PnL data',
+			},
+			{
+				displayName: 'Count Back',
+				name: 'pnlCountBack',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['account'],
+						operation: ['getPnl'],
+					},
+				},
+				default: 24,
+				description: 'Number of periods to return',
+			},
+			{
+				displayName: 'Start Time',
+				name: 'pnlStartTime',
+				type: 'dateTime',
+				displayOptions: {
+					show: {
+						resource: ['account'],
+						operation: ['getPnl'],
+					},
+				},
+				default: '',
+				description: 'Start time for PnL data (leave empty for 24h ago)',
+			},
+			{
+				displayName: 'End Time',
+				name: 'pnlEndTime',
+				type: 'dateTime',
+				displayOptions: {
+					show: {
+						resource: ['account'],
+						operation: ['getPnl'],
+					},
+				},
+				default: '',
+				description: 'End time for PnL data (leave empty for now)',
+			},
+			{
+				displayName: 'Limit',
+				name: 'positionFundingLimit',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['account'],
+						operation: ['getPositionFunding'],
+					},
+				},
+				default: 50,
+				description: 'Maximum number of position funding records to return',
+			},
+			{
+				displayName: 'Market Index',
+				name: 'positionFundingMarketIndex',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['account'],
+						operation: ['getPositionFunding'],
+					},
+				},
+				default: -1,
+				description: 'Filter by market index (-1 for all markets)',
 			},
 
 			// ==================== MARKET OPERATIONS ====================
@@ -273,6 +367,62 @@ export class Lighter implements INodeType {
 				description: 'The market index (0 = ETH-USD, etc.)',
 			},
 			{
+				displayName: 'Resolution',
+				name: 'fundingResolution',
+				type: 'options',
+				displayOptions: {
+					show: {
+						resource: ['market'],
+						operation: ['getFundings'],
+					},
+				},
+				options: [
+					{ name: '1 Hour', value: '1h' },
+					{ name: '1 Day', value: '1d' },
+				],
+				default: '1h',
+				description: 'Time resolution for funding data',
+			},
+			{
+				displayName: 'Count Back',
+				name: 'fundingCountBack',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['market'],
+						operation: ['getFundings'],
+					},
+				},
+				default: 24,
+				description: 'Number of periods to return (from now backwards)',
+			},
+			{
+				displayName: 'Start Time',
+				name: 'fundingStartTime',
+				type: 'dateTime',
+				displayOptions: {
+					show: {
+						resource: ['market'],
+						operation: ['getFundings'],
+					},
+				},
+				default: '',
+				description: 'Start time for funding data (leave empty for 24h ago)',
+			},
+			{
+				displayName: 'End Time',
+				name: 'fundingEndTime',
+				type: 'dateTime',
+				displayOptions: {
+					show: {
+						resource: ['market'],
+						operation: ['getFundings'],
+					},
+				},
+				default: '',
+				description: 'End time for funding data (leave empty for now)',
+			},
+			{
 				displayName: 'Depth',
 				name: 'depth',
 				type: 'number',
@@ -301,13 +451,13 @@ export class Lighter implements INodeType {
 					{
 						name: 'Get Active Orders',
 						value: 'getActiveOrders',
-						description: 'Get account active orders',
+						description: 'Get account active orders (requires auth token)',
 						action: 'Get active orders',
 					},
 					{
 						name: 'Get Inactive Orders',
 						value: 'getInactiveOrders',
-						description: 'Get account inactive orders',
+						description: 'Get account inactive orders (requires auth token)',
 						action: 'Get inactive orders',
 					},
 					{
@@ -607,7 +757,7 @@ export class Lighter implements INodeType {
 					{
 						name: 'Get Trades',
 						value: 'getTrades',
-						description: 'Get trades with filters',
+						description: 'Get trades with filters (requires auth token)',
 						action: 'Get trades',
 					},
 				],
@@ -652,6 +802,41 @@ export class Lighter implements INodeType {
 				default: -1,
 				description: 'Filter by account index (-1 for all accounts)',
 			},
+			{
+				displayName: 'Sort By',
+				name: 'tradeSortBy',
+				type: 'options',
+				displayOptions: {
+					show: {
+						resource: ['trade'],
+						operation: ['getTrades'],
+					},
+				},
+				options: [
+					{ name: 'Timestamp', value: 'timestamp' },
+					{ name: 'Price', value: 'price' },
+					{ name: 'Size', value: 'size' },
+				],
+				default: 'timestamp',
+				description: 'Field to sort by',
+			},
+			{
+				displayName: 'Sort Direction',
+				name: 'tradeSortDir',
+				type: 'options',
+				displayOptions: {
+					show: {
+						resource: ['trade'],
+						operation: ['getTrades'],
+					},
+				},
+				options: [
+					{ name: 'Descending', value: 'desc' },
+					{ name: 'Ascending', value: 'asc' },
+				],
+				default: 'desc',
+				description: 'Sort direction',
+			},
 
 			// ==================== TRANSACTION OPERATIONS ====================
 			{
@@ -680,19 +865,19 @@ export class Lighter implements INodeType {
 					{
 						name: 'Get Deposit History',
 						value: 'getDepositHistory',
-						description: 'Get deposit history',
+						description: 'Get deposit history (requires auth token)',
 						action: 'Get deposit history',
 					},
 					{
 						name: 'Get Withdraw History',
 						value: 'getWithdrawHistory',
-						description: 'Get withdrawal history',
+						description: 'Get withdrawal history (requires auth token)',
 						action: 'Get withdraw history',
 					},
 					{
 						name: 'Get Transfer History',
 						value: 'getTransferHistory',
-						description: 'Get transfer history',
+						description: 'Get transfer history (requires auth token)',
 						action: 'Get transfer history',
 					},
 					{
@@ -732,7 +917,12 @@ export class Lighter implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
-						operation: ['getTransactions', 'getDepositHistory', 'getWithdrawHistory', 'getTransferHistory'],
+						operation: [
+							'getTransactions',
+							'getDepositHistory',
+							'getWithdrawHistory',
+							'getTransferHistory',
+						],
 					},
 				},
 				default: 0,
@@ -745,7 +935,12 @@ export class Lighter implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
-						operation: ['getTransactions', 'getDepositHistory', 'getWithdrawHistory', 'getTransferHistory'],
+						operation: [
+							'getTransactions',
+							'getDepositHistory',
+							'getWithdrawHistory',
+							'getTransferHistory',
+						],
 					},
 				},
 				default: 50,
@@ -794,8 +989,29 @@ export class Lighter implements INodeType {
 						description: 'Get fast bridge information',
 						action: 'Get fast bridge info',
 					},
+					{
+						name: 'Get Auth Token',
+						value: 'getAuthToken',
+						description:
+							'Get auth token from Trading Backend for authenticated API calls',
+						action: 'Get auth token',
+					},
 				],
 				default: 'getStatus',
+			},
+			{
+				displayName: 'Token Expiry (seconds)',
+				name: 'authTokenExpiry',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['system'],
+						operation: ['getAuthToken'],
+					},
+				},
+				default: 3600,
+				description:
+					'How long the auth token should be valid (max 8 hours = 28800 seconds)',
 			},
 		],
 	};
@@ -805,9 +1021,10 @@ export class Lighter implements INodeType {
 		const returnData: INodeExecutionData[] = [];
 		const credentials = await this.getCredentials('lighterApi');
 
-		const baseUrl = credentials.environment === 'mainnet'
-			? 'https://mainnet.zklighter.elliot.ai'
-			: 'https://testnet.zklighter.elliot.ai';
+		const baseUrl =
+			credentials.environment === 'mainnet'
+				? 'https://mainnet.zklighter.elliot.ai'
+				: 'https://testnet.zklighter.elliot.ai';
 
 		const resource = this.getNodeParameter('resource', 0) as string;
 		const operation = this.getNodeParameter('operation', 0) as string;
@@ -840,13 +1057,40 @@ export class Lighter implements INodeType {
 						qs.account_index = this.getNodeParameter('accountIndex', i) as number;
 					} else if (operation === 'getPnl') {
 						endpoint = '/api/v1/pnl';
-						qs.account_index = this.getNodeParameter('accountIndex', i) as number;
+						const accountIndex = this.getNodeParameter('accountIndex', i) as number;
+						qs.by = 'index';
+						qs.value = String(accountIndex);
+						qs.resolution = this.getNodeParameter('pnlResolution', i) as string;
+						qs.count_back = this.getNodeParameter('pnlCountBack', i) as number;
+
+						const startTime = this.getNodeParameter('pnlStartTime', i) as string;
+						const endTime = this.getNodeParameter('pnlEndTime', i) as string;
+
+						if (endTime) {
+							qs.end_timestamp = new Date(endTime).getTime();
+						} else {
+							qs.end_timestamp = Date.now();
+						}
+
+						if (startTime) {
+							qs.start_timestamp = new Date(startTime).getTime();
+						} else {
+							qs.start_timestamp = (qs.end_timestamp as number) - 86400000;
+						}
 					} else if (operation === 'getLiquidations') {
 						endpoint = '/api/v1/liquidations';
 						qs.account_index = this.getNodeParameter('accountIndex', i) as number;
 					} else if (operation === 'getPositionFunding') {
 						endpoint = '/api/v1/positionFunding';
 						qs.account_index = this.getNodeParameter('accountIndex', i) as number;
+						qs.limit = this.getNodeParameter('positionFundingLimit', i) as number;
+						const marketIndex = this.getNodeParameter(
+							'positionFundingMarketIndex',
+							i,
+						) as number;
+						if (marketIndex >= 0) {
+							qs.market_id = marketIndex;
+						}
 					} else if (operation === 'getApiKeys') {
 						endpoint = '/api/v1/apikeys';
 						qs.account_index = this.getNodeParameter('accountIndex', i) as number;
@@ -864,19 +1108,38 @@ export class Lighter implements INodeType {
 						endpoint = '/api/v1/orderBooks';
 					} else if (operation === 'getOrderBookDetails') {
 						endpoint = '/api/v1/orderBookDetails';
-						qs.market_index = this.getNodeParameter('marketIndex', i) as number;
+						qs.market_id = this.getNodeParameter('marketIndex', i) as number;
 						qs.depth = this.getNodeParameter('depth', i) as number;
 					} else if (operation === 'getOrderBookOrders') {
 						endpoint = '/api/v1/orderBookOrders';
-						qs.market_index = this.getNodeParameter('marketIndex', i) as number;
-						qs.depth = this.getNodeParameter('depth', i) as number;
+						qs.market_id = this.getNodeParameter('marketIndex', i) as number;
+						qs.limit = this.getNodeParameter('depth', i) as number;
 					} else if (operation === 'getExchangeStats') {
 						endpoint = '/api/v1/exchangeStats';
 					} else if (operation === 'getFundingRates') {
 						endpoint = '/api/v1/funding-rates';
 					} else if (operation === 'getFundings') {
 						endpoint = '/api/v1/fundings';
-						qs.market_index = this.getNodeParameter('marketIndex', i) as number;
+						qs.market_id = this.getNodeParameter('marketIndex', i) as number;
+						qs.resolution = this.getNodeParameter('fundingResolution', i) as string;
+						qs.count_back = this.getNodeParameter('fundingCountBack', i) as number;
+
+						// Handle timestamps - API requires start_timestamp and end_timestamp in milliseconds
+						const startTime = this.getNodeParameter('fundingStartTime', i) as string;
+						const endTime = this.getNodeParameter('fundingEndTime', i) as string;
+
+						if (endTime) {
+							qs.end_timestamp = new Date(endTime).getTime();
+						} else {
+							qs.end_timestamp = Date.now();
+						}
+
+						if (startTime) {
+							qs.start_timestamp = new Date(startTime).getTime();
+						} else {
+							// Default to 24 hours before end_timestamp
+							qs.start_timestamp = (qs.end_timestamp as number) - 86400000;
+						}
 					}
 				}
 
@@ -889,13 +1152,13 @@ export class Lighter implements INodeType {
 						endpoint = '/api/v1/accountActiveOrders';
 						const marketIndex = this.getNodeParameter('orderMarketIndex', i) as number;
 						if (marketIndex >= 0) {
-							qs.market_index = marketIndex;
+							qs.market_id = marketIndex;
 						}
 					} else if (operation === 'getInactiveOrders') {
 						endpoint = '/api/v1/accountInactiveOrders';
 						const marketIndex = this.getNodeParameter('orderMarketIndex', i) as number;
 						if (marketIndex >= 0) {
-							qs.market_index = marketIndex;
+							qs.market_id = marketIndex;
 						}
 					} else if (operation === 'exportOrders') {
 						endpoint = '/api/v1/export';
@@ -909,13 +1172,18 @@ export class Lighter implements INodeType {
 
 					if (operation === 'getRecentTrades') {
 						endpoint = '/api/v1/recentTrades';
-						qs.market_index = marketIndex;
+						qs.market_id = marketIndex;
 						qs.limit = limit;
 					} else if (operation === 'getTrades') {
 						endpoint = '/api/v1/trades';
-						qs.market_index = marketIndex;
+						qs.market_id = marketIndex;
 						qs.limit = limit;
-						const accountIndex = this.getNodeParameter('tradeAccountIndex', i) as number;
+						qs.sort_by = this.getNodeParameter('tradeSortBy', i) as string;
+						qs.sort_dir = this.getNodeParameter('tradeSortDir', i) as string;
+						const accountIndex = this.getNodeParameter(
+							'tradeAccountIndex',
+							i,
+						) as number;
 						if (accountIndex >= 0) {
 							qs.account_index = accountIndex;
 						}
@@ -926,21 +1194,22 @@ export class Lighter implements INodeType {
 				else if (resource === 'transaction') {
 					if (operation === 'getTransaction') {
 						endpoint = '/api/v1/tx';
-						qs.hash = this.getNodeParameter('txHash', i) as string;
+						qs.by = 'hash';
+						qs.value = this.getNodeParameter('txHash', i) as string;
 					} else if (operation === 'getTransactions') {
 						endpoint = '/api/v1/txs';
 						qs.account_index = this.getNodeParameter('txAccountIndex', i) as number;
 						qs.limit = this.getNodeParameter('txLimit', i) as number;
 					} else if (operation === 'getDepositHistory') {
-						endpoint = '/api/v1/deposit_history';
+						endpoint = '/api/v1/deposit/history';
 						qs.account_index = this.getNodeParameter('txAccountIndex', i) as number;
 						qs.limit = this.getNodeParameter('txLimit', i) as number;
 					} else if (operation === 'getWithdrawHistory') {
-						endpoint = '/api/v1/withdraw_history';
+						endpoint = '/api/v1/withdraw/history';
 						qs.account_index = this.getNodeParameter('txAccountIndex', i) as number;
 						qs.limit = this.getNodeParameter('txLimit', i) as number;
 					} else if (operation === 'getTransferHistory') {
-						endpoint = '/api/v1/transfer_history';
+						endpoint = '/api/v1/transfer/history';
 						qs.account_index = this.getNodeParameter('txAccountIndex', i) as number;
 						qs.limit = this.getNodeParameter('txLimit', i) as number;
 					} else if (operation === 'getTransferFeeInfo') {
@@ -962,6 +1231,36 @@ export class Lighter implements INodeType {
 						endpoint = '/api/v1/publicPoolsMetadata';
 					} else if (operation === 'getFastBridgeInfo') {
 						endpoint = '/api/v1/fastbridge_info';
+					} else if (operation === 'getAuthToken') {
+						const backendUrl = credentials.tradingBackendUrl as string;
+						if (!backendUrl) {
+							throw new NodeApiError(this.getNode(), {
+								message:
+									'Trading Backend URL is required for auth token generation. Configure it in credentials.',
+							});
+						}
+
+						const backendHeaders: IDataObject = {
+							'Content-Type': 'application/json',
+						};
+						if (credentials.backendApiSecret) {
+							backendHeaders['X-API-Secret'] = credentials.backendApiSecret as string;
+						}
+
+						const expiry = this.getNodeParameter('authTokenExpiry', i) as number;
+
+						const backendResponse = await this.helpers.request({
+							method: 'GET',
+							url: `${backendUrl}/api/auth-token?expiry=${expiry}`,
+							headers: backendHeaders,
+							json: true,
+						});
+
+						returnData.push({
+							json: backendResponse as IDataObject,
+							pairedItem: { item: i },
+						});
+						continue;
 					}
 				}
 
@@ -970,7 +1269,8 @@ export class Lighter implements INodeType {
 					const backendUrl = credentials.tradingBackendUrl as string;
 					if (!backendUrl) {
 						throw new NodeApiError(this.getNode(), {
-							message: 'Trading Backend URL is required for trading operations. Configure it in credentials.',
+							message:
+								'Trading Backend URL is required for trading operations. Configure it in credentials.',
 						});
 					}
 
@@ -1050,7 +1350,8 @@ export class Lighter implements INodeType {
 					const backendUrl = credentials.tradingBackendUrl as string;
 					if (!backendUrl) {
 						throw new NodeApiError(this.getNode(), {
-							message: 'Trading Backend URL is required for position operations. Configure it in credentials.',
+							message:
+								'Trading Backend URL is required for position operations. Configure it in credentials.',
 						});
 					}
 
@@ -1099,7 +1400,7 @@ export class Lighter implements INodeType {
 				}
 
 				const response = await this.helpers.request(requestOptions);
-				
+
 				returnData.push({
 					json: response as IDataObject,
 					pairedItem: { item: i },
@@ -1115,7 +1416,11 @@ export class Lighter implements INodeType {
 					continue;
 				}
 				const errorMessage = (error as Error).message;
-				throw new NodeApiError(this.getNode(), { message: errorMessage }, { message: errorMessage });
+				throw new NodeApiError(
+					this.getNode(),
+					{ message: errorMessage },
+					{ message: errorMessage },
+				);
 			}
 		}
 

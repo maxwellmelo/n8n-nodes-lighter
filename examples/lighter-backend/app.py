@@ -28,6 +28,10 @@ import logging
 from flask import Flask, request, jsonify
 from functools import wraps
 
+# Fix event loop issues with Gunicorn workers
+import nest_asyncio
+nest_asyncio.apply()
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -61,10 +65,10 @@ def get_client():
     global _client
     if _client is None:
         try:
-            import zklighter
-            from zklighter import nonce_manager
+            import lighter
+            from lighter import nonce_manager
 
-            _client = zklighter.SignerClient(
+            _client = lighter.SignerClient(
                 url=BASE_URL,
                 api_private_keys={LIGHTER_API_KEY_INDEX: LIGHTER_API_KEY},
                 account_index=LIGHTER_ACCOUNT_INDEX,
@@ -75,7 +79,7 @@ def get_client():
                 raise Exception(f"Client verification error: {err}")
             logger.info("Lighter SignerClient initialized successfully")
         except ImportError:
-            raise Exception("lighter-sdk not installed. Run: pip install lighter-sdk")
+            raise Exception("lighter not installed. Run: pip install zklighter")
     return _client
 
 
@@ -83,12 +87,12 @@ def get_order_api():
     """Get Lighter OrderApi for read operations."""
     global _order_api
     if _order_api is None:
-        import zklighter
+        import lighter
 
-        api_client = zklighter.ApiClient(
-            configuration=zklighter.Configuration(host=BASE_URL)
+        api_client = lighter.ApiClient(
+            configuration=lighter.Configuration(host=BASE_URL)
         )
-        _order_api = zklighter.OrderApi(api_client)
+        _order_api = lighter.OrderApi(api_client)
     return _order_api
 
 
@@ -96,13 +100,54 @@ def get_account_api():
     """Get Lighter AccountApi for read operations."""
     global _account_api
     if _account_api is None:
-        import zklighter
+        import lighter
 
-        api_client = zklighter.ApiClient(
-            configuration=zklighter.Configuration(host=BASE_URL)
+        api_client = lighter.ApiClient(
+            configuration=lighter.Configuration(host=BASE_URL)
         )
-        _account_api = zklighter.AccountApi(api_client)
+        _account_api = lighter.AccountApi(api_client)
     return _account_api
+
+
+def create_auth_token():
+    """Get a fresh auth token for authenticated API calls."""
+    client = get_client()
+    token, err = client.create_auth_token_with_expiry(deadline=600)
+    if err:
+        raise Exception(f"Failed to create auth token: {err}")
+    return token
+
+
+# Market decimals cache
+_market_decimals = {}
+
+
+async def get_market_decimals(market_index: int) -> tuple:
+    """Get size and price decimals for a market."""
+    global _market_decimals
+    if market_index not in _market_decimals:
+        import aiohttp
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{BASE_URL}/api/v1/orderBooks") as resp:
+                data = await resp.json()
+                for ob in data.get("order_books", []):
+                    mid = ob.get("market_id")
+                    size_dec = ob.get("supported_size_decimals", 4)
+                    price_dec = ob.get("supported_price_decimals", 2)
+                    _market_decimals[mid] = (size_dec, price_dec)
+
+    return _market_decimals.get(market_index, (4, 2))
+
+
+def convert_size_to_base_amount(size: float, size_decimals: int) -> int:
+    """Convert human-readable size to base amount (integer)."""
+    return int(size * (10 ** size_decimals))
+
+
+def convert_price_to_int(price: float, price_decimals: int) -> int:
+    """Convert human-readable price to integer."""
+    return int(price * (10 ** price_decimals))
 
 
 def async_route(f):
@@ -180,8 +225,11 @@ async def create_limit_order():
             return jsonify({"error": "price must be > 0 for limit orders"}), 400
 
         is_ask = side == "sell"
-        base_amount = int(size * 10000)
-        price_int = int(price * 100)
+
+        # Get market decimals for proper conversion
+        size_dec, price_dec = await get_market_decimals(market_index)
+        base_amount = convert_size_to_base_amount(size, size_dec)
+        price_int = convert_price_to_int(price, price_dec)
 
         time_in_force = (
             client.ORDER_TIME_IN_FORCE_POST_ONLY
@@ -245,7 +293,7 @@ async def create_market_order():
             return jsonify({"error": "size must be > 0"}), 400
 
         orderbook = await order_api.order_book_orders(
-            market_index=market_index, limit=1
+            market_id=market_index, limit=1
         )
 
         is_ask = side == "sell"
@@ -260,8 +308,10 @@ async def create_market_order():
         slippage_multiplier = (1 - slippage) if is_ask else (1 + slippage)
         execution_price = current_price * slippage_multiplier
 
-        base_amount = int(size * 10000)
-        price_int = int(execution_price * 100)
+        # Get market decimals for proper conversion
+        size_dec, price_dec = await get_market_decimals(market_index)
+        base_amount = convert_size_to_base_amount(size, size_dec)
+        price_int = convert_price_to_int(execution_price, price_dec)
 
         tx, response, err = await client.create_order(
             market_index=market_index,
@@ -346,9 +396,11 @@ async def cancel_all_orders():
 
         market_index = data.get("market_index")
 
+        auth_token = create_auth_token()
         active_orders = await order_api.account_active_orders(
             account_index=LIGHTER_ACCOUNT_INDEX,
             market_id=market_index if market_index is not None else -1,
+            auth=auth_token,
         )
 
         orders = active_orders.orders or []
@@ -404,10 +456,14 @@ async def close_position():
         market_index = int(data.get("market_index", 0))
         slippage = float(data.get("slippage", 0.5)) / 100
 
-        account = await account_api.account(by="index", value=LIGHTER_ACCOUNT_INDEX)
+        response = await account_api.account(by="index", value=str(LIGHTER_ACCOUNT_INDEX))
 
         position = None
-        positions = account.positions or []
+        # Response is DetailedAccounts with accounts list
+        accounts = getattr(response, "accounts", []) or []
+        positions = []
+        for account in accounts:
+            positions.extend(getattr(account, "positions", []) or [])
         for p in positions:
             p_market = getattr(p, "market_index", getattr(p, "market_id", None))
             if p_market == market_index:
@@ -432,7 +488,7 @@ async def close_position():
             return jsonify({"success": True, "message": "Position already closed"})
 
         orderbook = await order_api.order_book_orders(
-            market_index=market_index, limit=1
+            market_id=market_index, limit=1
         )
 
         is_ask = is_long
@@ -447,8 +503,10 @@ async def close_position():
         slippage_multiplier = (1 - slippage) if is_ask else (1 + slippage)
         execution_price = current_price * slippage_multiplier
 
-        base_amount = int(position_size * 10000)
-        price_int = int(execution_price * 100)
+        # Get market decimals for proper conversion
+        size_dec, price_dec = await get_market_decimals(market_index)
+        base_amount = convert_size_to_base_amount(position_size, size_dec)
+        price_int = convert_price_to_int(execution_price, price_dec)
 
         tx, response, err = await client.create_order(
             market_index=market_index,
@@ -539,7 +597,7 @@ async def update_leverage():
 async def get_account():
     try:
         account_api = get_account_api()
-        account = await account_api.account(by="index", value=LIGHTER_ACCOUNT_INDEX)
+        account = await account_api.account(by="index", value=str(LIGHTER_ACCOUNT_INDEX))
         return jsonify(account.model_dump())
     except Exception as e:
         logger.exception("Error getting account")
@@ -552,21 +610,25 @@ async def get_account():
 async def get_positions():
     try:
         account_api = get_account_api()
-        account = await account_api.account(by="index", value=LIGHTER_ACCOUNT_INDEX)
+        response = await account_api.account(by="index", value=str(LIGHTER_ACCOUNT_INDEX))
 
         positions = []
-        for p in account.positions or []:
-            pos_size = float(getattr(p, "position", getattr(p, "size", 0)))
-            if pos_size != 0:
-                positions.append(
-                    {
-                        "market_index": getattr(
-                            p, "market_index", getattr(p, "market_id", 0)
-                        ),
-                        "size": abs(pos_size),
-                        "side": "long" if pos_size > 0 else "short",
-                    }
-                )
+        # Response is DetailedAccounts with accounts list
+        accounts = getattr(response, "accounts", []) or []
+        for account in accounts:
+            account_positions = getattr(account, "positions", []) or []
+            for p in account_positions:
+                pos_size = float(getattr(p, "position", getattr(p, "size", 0)))
+                if pos_size != 0:
+                    positions.append(
+                        {
+                            "market_index": getattr(
+                                p, "market_index", getattr(p, "market_id", 0)
+                            ),
+                            "size": abs(pos_size),
+                            "side": "long" if pos_size > 0 else "short",
+                        }
+                    )
 
         return jsonify({"positions": positions, "count": len(positions)})
     except Exception as e:
@@ -582,9 +644,11 @@ async def get_orders():
         order_api = get_order_api()
         market_index = request.args.get("market_index", type=int, default=-1)
 
+        auth_token = create_auth_token()
         active_orders = await order_api.account_active_orders(
             account_index=LIGHTER_ACCOUNT_INDEX,
             market_id=market_index,
+            auth=auth_token,
         )
 
         orders = []
@@ -609,7 +673,8 @@ async def get_orders():
 
 @app.route("/api/auth-token", methods=["GET"])
 @require_auth
-def get_auth_token():
+@async_route
+async def get_auth_token():
     try:
         client = get_client()
         expiry = request.args.get("expiry", type=int, default=3600)
