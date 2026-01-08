@@ -17,6 +17,7 @@ Configuration via environment variables:
     LIGHTER_ENVIRONMENT - 'mainnet' or 'testnet' (default: mainnet)
     FLASK_PORT - Server port (default: 3001)
     API_SECRET - Optional secret for authentication
+    NONCE_RETRY_ATTEMPTS - Max retry attempts for nonce errors (default: 3)
 
 Author: Maxwell Melo <maxwell.melo0@gmail.com>
 """
@@ -27,9 +28,11 @@ import asyncio
 import logging
 from flask import Flask, request, jsonify
 from functools import wraps
+from typing import Callable, Any, Tuple, Optional
 
 # Fix event loop issues with Gunicorn workers
 import nest_asyncio
+
 nest_asyncio.apply()
 
 # Configure logging
@@ -37,6 +40,111 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# NONCE ERROR HANDLING
+# =============================================================================
+
+NONCE_ERROR_PATTERNS = [
+    "invalid nonce",
+    "nonce",
+    "21104",
+]
+
+NONCE_RETRY_ATTEMPTS = int(os.getenv("NONCE_RETRY_ATTEMPTS", "3"))
+NONCE_RETRY_DELAY_MS = int(os.getenv("NONCE_RETRY_DELAY_MS", "500"))
+
+
+def is_nonce_error(error: Any) -> bool:
+    """Check if an error is related to nonce issues."""
+    if error is None:
+        return False
+    error_str = str(error).lower()
+    return any(pattern in error_str for pattern in NONCE_ERROR_PATTERNS)
+
+
+def refresh_client_nonce():
+    """Force refresh the nonce from the server."""
+    global _client
+    if _client is not None:
+        try:
+            _client.nonce_manager.hard_refresh_nonce(LIGHTER_API_KEY_INDEX)
+            logger.info(f"Nonce refreshed for API key {LIGHTER_API_KEY_INDEX}")
+        except Exception as e:
+            logger.warning(f"Failed to refresh nonce: {e}")
+
+
+def reset_client():
+    """Reset the client to force re-initialization with fresh nonce."""
+    global _client
+    _client = None
+    logger.info("Client reset - will re-initialize on next request")
+
+
+async def execute_with_nonce_retry(
+    operation: Callable, *args, **kwargs
+) -> Tuple[Any, Any, Any]:
+    """
+    Execute a trading operation with automatic retry on nonce errors.
+
+    Args:
+        operation: Async function to execute (e.g., client.create_order)
+        *args, **kwargs: Arguments to pass to the operation
+
+    Returns:
+        Tuple of (tx, response, error) from the operation
+    """
+    last_error = None
+
+    for attempt in range(NONCE_RETRY_ATTEMPTS):
+        try:
+            tx, response, err = await operation(*args, **kwargs)
+
+            if err and is_nonce_error(err):
+                last_error = err
+                logger.warning(
+                    f"Nonce error on attempt {attempt + 1}/{NONCE_RETRY_ATTEMPTS}: {err}"
+                )
+
+                # Try to refresh nonce first
+                if attempt < NONCE_RETRY_ATTEMPTS - 1:
+                    refresh_client_nonce()
+                    # Wait before retry
+                    await asyncio.sleep(NONCE_RETRY_DELAY_MS / 1000)
+                    continue
+                else:
+                    # Last attempt failed, reset client entirely
+                    reset_client()
+                    return (
+                        tx,
+                        response,
+                        f"Nonce error after {NONCE_RETRY_ATTEMPTS} attempts: {err}",
+                    )
+
+            # Success or non-nonce error
+            return tx, response, err
+
+        except Exception as e:
+            last_error = e
+            if is_nonce_error(e):
+                logger.warning(
+                    f"Nonce exception on attempt {attempt + 1}/{NONCE_RETRY_ATTEMPTS}: {e}"
+                )
+                if attempt < NONCE_RETRY_ATTEMPTS - 1:
+                    refresh_client_nonce()
+                    await asyncio.sleep(NONCE_RETRY_DELAY_MS / 1000)
+                    continue
+                else:
+                    reset_client()
+            raise
+
+    return (
+        None,
+        None,
+        f"Operation failed after {NONCE_RETRY_ATTEMPTS} attempts: {last_error}",
+    )
+
 
 app = Flask(__name__)
 
@@ -72,7 +180,8 @@ def get_client():
                 url=BASE_URL,
                 api_private_keys={LIGHTER_API_KEY_INDEX: LIGHTER_API_KEY},
                 account_index=LIGHTER_ACCOUNT_INDEX,
-                nonce_management_type=nonce_manager.NonceManagerType.OPTIMISTIC,
+                # Use API mode to always fetch fresh nonce from server
+                nonce_management_type=nonce_manager.NonceManagerType.API,
             )
             err = _client.check_client()
             if err:
@@ -142,12 +251,12 @@ async def get_market_decimals(market_index: int) -> tuple:
 
 def convert_size_to_base_amount(size: float, size_decimals: int) -> int:
     """Convert human-readable size to base amount (integer)."""
-    return int(size * (10 ** size_decimals))
+    return int(size * (10**size_decimals))
 
 
 def convert_price_to_int(price: float, price_decimals: int) -> int:
     """Convert human-readable price to integer."""
-    return int(price * (10 ** price_decimals))
+    return int(price * (10**price_decimals))
 
 
 def async_route(f):
@@ -196,8 +305,32 @@ def get_info():
             "api_key_index": LIGHTER_API_KEY_INDEX,
             "base_url": BASE_URL,
             "auth_required": bool(API_SECRET),
+            "nonce_retry_attempts": NONCE_RETRY_ATTEMPTS,
+            "nonce_retry_delay_ms": NONCE_RETRY_DELAY_MS,
         }
     )
+
+
+@app.route("/api/nonce/refresh", methods=["POST"])
+@require_auth
+def refresh_nonce_endpoint():
+    """Manually refresh the nonce from the server."""
+    try:
+        refresh_client_nonce()
+        return jsonify({"success": True, "message": "Nonce refreshed"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/client/reset", methods=["POST"])
+@require_auth
+def reset_client_endpoint():
+    """Reset the client entirely (re-initializes on next request)."""
+    try:
+        reset_client()
+        return jsonify({"success": True, "message": "Client reset"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route("/api/order/limit", methods=["POST"])
@@ -237,7 +370,9 @@ async def create_limit_order():
             else client.ORDER_TIME_IN_FORCE_GOOD_TILL_TIME
         )
 
-        tx, response, err = await client.create_order(
+        # Execute with automatic retry on nonce errors
+        tx, response, err = await execute_with_nonce_retry(
+            client.create_order,
             market_index=market_index,
             client_order_index=client_order_id,
             base_amount=base_amount,
@@ -249,7 +384,7 @@ async def create_limit_order():
         )
 
         if err:
-            return jsonify({"success": False, "error": err}), 400
+            return jsonify({"success": False, "error": str(err)}), 400
 
         return jsonify(
             {
@@ -292,9 +427,7 @@ async def create_market_order():
         if size <= 0:
             return jsonify({"error": "size must be > 0"}), 400
 
-        orderbook = await order_api.order_book_orders(
-            market_id=market_index, limit=1
-        )
+        orderbook = await order_api.order_book_orders(market_id=market_index, limit=1)
 
         is_ask = side == "sell"
 
@@ -313,7 +446,9 @@ async def create_market_order():
         base_amount = convert_size_to_base_amount(size, size_dec)
         price_int = convert_price_to_int(execution_price, price_dec)
 
-        tx, response, err = await client.create_order(
+        # Execute with automatic retry on nonce errors
+        tx, response, err = await execute_with_nonce_retry(
+            client.create_order,
             market_index=market_index,
             client_order_index=client_order_id,
             base_amount=base_amount,
@@ -326,7 +461,7 @@ async def create_market_order():
         )
 
         if err:
-            return jsonify({"success": False, "error": err}), 400
+            return jsonify({"success": False, "error": str(err)}), 400
 
         return jsonify(
             {
@@ -364,13 +499,15 @@ async def cancel_order():
         if order_index <= 0:
             return jsonify({"error": "order_index is required"}), 400
 
-        tx, response, err = await client.cancel_order(
+        # Execute with automatic retry on nonce errors
+        tx, response, err = await execute_with_nonce_retry(
+            client.cancel_order,
             market_index=market_index,
             order_index=order_index,
         )
 
         if err:
-            return jsonify({"success": False, "error": err}), 400
+            return jsonify({"success": False, "error": str(err)}), 400
 
         return jsonify(
             {
@@ -418,12 +555,14 @@ async def cancel_all_orders():
 
         for order in orders:
             try:
-                _, response, err = await client.cancel_order(
+                # Execute with automatic retry on nonce errors
+                _, response, err = await execute_with_nonce_retry(
+                    client.cancel_order,
                     market_index=getattr(order, "market_index", market_index or 0),
                     order_index=order.order_index,
                 )
                 if err:
-                    errors.append({"order_index": order.order_index, "error": err})
+                    errors.append({"order_index": order.order_index, "error": str(err)})
                 else:
                     cancelled.append(order.order_index)
             except Exception as e:
@@ -456,7 +595,9 @@ async def close_position():
         market_index = int(data.get("market_index", 0))
         slippage = float(data.get("slippage", 0.5)) / 100
 
-        response = await account_api.account(by="index", value=str(LIGHTER_ACCOUNT_INDEX))
+        response = await account_api.account(
+            by="index", value=str(LIGHTER_ACCOUNT_INDEX)
+        )
 
         position = None
         # Response is DetailedAccounts with accounts list
@@ -487,9 +628,7 @@ async def close_position():
         if position_size <= 0:
             return jsonify({"success": True, "message": "Position already closed"})
 
-        orderbook = await order_api.order_book_orders(
-            market_id=market_index, limit=1
-        )
+        orderbook = await order_api.order_book_orders(market_id=market_index, limit=1)
 
         is_ask = is_long
 
@@ -508,7 +647,9 @@ async def close_position():
         base_amount = convert_size_to_base_amount(position_size, size_dec)
         price_int = convert_price_to_int(execution_price, price_dec)
 
-        tx, response, err = await client.create_order(
+        # Execute with automatic retry on nonce errors
+        tx, response, err = await execute_with_nonce_retry(
+            client.create_order,
             market_index=market_index,
             client_order_index=int(time.time() * 1000),
             base_amount=base_amount,
@@ -521,7 +662,7 @@ async def close_position():
         )
 
         if err:
-            return jsonify({"success": False, "error": err}), 400
+            return jsonify({"success": False, "error": str(err)}), 400
 
         return jsonify(
             {
@@ -565,14 +706,16 @@ async def update_leverage():
             else client.ISOLATED_MARGIN_MODE
         )
 
-        tx, response, err = await client.update_leverage(
+        # Execute with automatic retry on nonce errors
+        tx, response, err = await execute_with_nonce_retry(
+            client.update_leverage,
             market_index=market_index,
             fraction=fraction,
             margin_mode=mode,
         )
 
         if err:
-            return jsonify({"success": False, "error": err}), 400
+            return jsonify({"success": False, "error": str(err)}), 400
 
         return jsonify(
             {
@@ -597,7 +740,9 @@ async def update_leverage():
 async def get_account():
     try:
         account_api = get_account_api()
-        account = await account_api.account(by="index", value=str(LIGHTER_ACCOUNT_INDEX))
+        account = await account_api.account(
+            by="index", value=str(LIGHTER_ACCOUNT_INDEX)
+        )
         return jsonify(account.model_dump())
     except Exception as e:
         logger.exception("Error getting account")
@@ -610,7 +755,9 @@ async def get_account():
 async def get_positions():
     try:
         account_api = get_account_api()
-        response = await account_api.account(by="index", value=str(LIGHTER_ACCOUNT_INDEX))
+        response = await account_api.account(
+            by="index", value=str(LIGHTER_ACCOUNT_INDEX)
+        )
 
         positions = []
         # Response is DetailedAccounts with accounts list

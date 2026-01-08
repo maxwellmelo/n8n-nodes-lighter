@@ -20,6 +20,10 @@ export LIGHTER_API_KEY='sua_chave_privada_da_api'
 export LIGHTER_ACCOUNT_INDEX='seu_account_index'
 export LIGHTER_API_KEY_INDEX='3'  # 3-254, padrão é 3
 export LIGHTER_ENVIRONMENT='mainnet'  # ou 'testnet'
+
+# Opcionais - Configuração de Retry para erros de Nonce
+export NONCE_RETRY_ATTEMPTS='3'    # Tentativas em caso de erro de nonce
+export NONCE_RETRY_DELAY_MS='500'  # Delay entre tentativas (ms)
 ```
 
 Ou crie um arquivo `.env`:
@@ -29,6 +33,8 @@ LIGHTER_API_KEY=sua_chave_privada_da_api
 LIGHTER_ACCOUNT_INDEX=123456
 LIGHTER_API_KEY_INDEX=3
 LIGHTER_ENVIRONMENT=mainnet
+NONCE_RETRY_ATTEMPTS=3
+NONCE_RETRY_DELAY_MS=500
 ```
 
 ## Uso
@@ -129,6 +135,34 @@ RUN pip install -r requirements.txt
 COPY app.py .
 CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:3001", "app:app"]
 ```
+
+## Tratamento de Erros de Nonce
+
+O backend implementa tratamento robusto para erros de nonce (`invalid nonce`, code 21104):
+
+### Estratégias Implementadas
+
+1. **Modo API para Nonce**: Busca o nonce do servidor a cada requisição (não usa cache local)
+2. **Retry Automático**: Em caso de erro de nonce, tenta novamente até N vezes
+3. **Refresh de Nonce**: Atualiza o nonce do servidor entre tentativas
+4. **Reset de Cliente**: Se todas tentativas falharem, reseta o cliente completamente
+
+### Endpoints de Debug
+
+```bash
+# Força refresh do nonce manualmente
+POST /api/nonce/refresh
+
+# Reseta o cliente completamente  
+POST /api/client/reset
+```
+
+### Configuração
+
+| Variável | Default | Descrição |
+|----------|---------|-----------|
+| `NONCE_RETRY_ATTEMPTS` | 3 | Número de tentativas |
+| `NONCE_RETRY_DELAY_MS` | 500 | Delay entre tentativas (ms) |
 
 ## Segurança
 
