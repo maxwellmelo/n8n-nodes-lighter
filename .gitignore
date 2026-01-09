@@ -28,3 +28,6 @@ npm-debug.log*
 
 # n8n development
 .n8n/
+
+# Workflow examples (local only)
+examples/*.json
