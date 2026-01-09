@@ -21,7 +21,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ═══════════════════════════════════════════════════════════════════════════\n// PARSER DE SINAIS - Lighter Adaptive Signal System\n// Extrai dados estruturados dos alertas do TradingView\n// ═══════════════════════════════════════════════════════════════════════════\n\nconst input = $input.first().json;\nconst rawText = input.body || '';\n\n// ═══════════════════════════════════════════════════════════════════════════\n// MAPEAMENTO DE SIMBOLOS PARA MARKET_INDEX DA LIGHTER\n// ═══════════════════════════════════════════════════════════════════════════\nconst marketIndexMap = {\n  'ETH': 0, 'BTC': 1, 'SOL': 2, 'DOGE': 3, '1000PEPE': 4,\n  'WIF': 5, 'WLD': 6, 'XRP': 7, 'LINK': 8, 'AVAX': 9,\n  'NEAR': 10, 'DOT': 11, 'TON': 12, 'TAO': 13, 'POL': 14,\n  'TRUMP': 15, 'SUI': 16, '1000SHIB': 17, '1000BONK': 18, '1000FLOKI': 19,\n  'BERA': 20, 'FARTCOIN': 21, 'AI16Z': 22, 'POPCAT': 23, 'HYPE': 24,\n  'BNB': 25, 'JUP': 26, 'AAVE': 27, 'MKR': 28, 'ENA': 29,\n  'UNI': 30, 'APT': 31, 'SEI': 32, 'KAITO': 33, 'IP': 34,\n  'LTC': 35, 'CRV': 36, 'PENDLE': 37, 'ONDO': 38, 'ADA': 39,\n  'S': 40, 'VIRTUAL': 41, 'SPX': 42, 'TRX': 43, 'SYRUP': 44,\n  'PUMP': 45, 'LDO': 46, 'PENGU': 47, 'PAXG': 48, 'EIGEN': 49,\n  'ARB': 50, 'RESOLV': 51, 'GRASS': 52, 'ZORA': 53,\n};\n\n// ═══════════════════════════════════════════════════════════════════════════\n// DETECTAR TIPO DE ALERTA\n// ═══════════════════════════════════════════════════════════════════════════\nlet alertType = 'UNKNOWN';\nlet direction = '';\n\nif (rawText.includes('🟢 LONG')) {\n  alertType = 'ENTRY_LONG';\n  direction = 'long';\n} else if (rawText.includes('🔴 SHORT')) {\n  alertType = 'ENTRY_SHORT';\n  direction = 'short';\n} else if (rawText.includes('✅ TP1 HIT')) {\n  alertType = 'TP1_HIT';\n  direction = rawText.includes('LONG') ? 'long' : 'short';\n} else if (rawText.includes('✅ TP2 HIT')) {\n  alertType = 'TP2_HIT';\n  direction = rawText.includes('LONG') ? 'long' : 'short';\n} else if (rawText.includes('🎯 FULL WIN')) {\n  alertType = 'FULL_WIN';\n  direction = rawText.includes('LONG') ? 'long' : 'short';\n} else if (rawText.includes('❌ STOP LOSS')) {\n  alertType = 'STOP_LOSS';\n  direction = rawText.includes('LONG') ? 'long' : 'short';\n} else if (rawText.includes('🟡 PARTIAL')) {\n  alertType = 'PARTIAL';\n  direction = rawText.includes('LONG') ? 'long' : 'short';\n}\n\n// ═══════════════════════════════════════════════════════════════════════════\n// EXTRAIR SIMBOLO E GRADE\n// ═══════════════════════════════════════════════════════════════════════════\n// Grade: [A], [B], [C]\nconst gradeMatch = rawText.match(/\\[([ABC])\\]/);\nconst grade = gradeMatch ? gradeMatch[1] : 'C';\n\n// Primeiro tentar formato EXCHANGE:SYMBOL (ex: BINANCE:BTCUSDT)\nlet rawSymbol = '';\nconst exchangeSymbolMatch = rawText.match(/(?:BINANCE|BYBIT|OKX|COINBASE|KRAKEN|MEXC|KUCOIN|GATEIO|HUOBI|BITGET):([A-Z0-9]+)/i);\nif (exchangeSymbolMatch) {\n  rawSymbol = exchangeSymbolMatch[1];\n} else {\n  // Fallback: tentar formato simples após último dash (ex: - BTCUSDT.P)\n  const simpleMatch = rawText.match(/- ([A-Z0-9]+(?:USDT|USD)(?:\\.P)?)/im);\n  if (simpleMatch) {\n    rawSymbol = simpleMatch[1];\n  }\n}\n\n// Limpar símbolo: BTCUSDT.P -> BTC, ETHUSDT -> ETH, 1000PEPEUSDT -> 1000PEPE\nlet cleanSymbol = rawSymbol\n  .replace(/\\.P$/i, '')\n  .replace(/USDT$/i, '')\n  .replace(/USD$/i, '')\n  .toUpperCase();\n\n// Obter market_index\nconst marketIndex = marketIndexMap[cleanSymbol] !== undefined ? marketIndexMap[cleanSymbol] : -1;\n\n// ═══════════════════════════════════════════════════════════════════════════\n// EXTRAIR SIGNAL ID\n// ═══════════════════════════════════════════════════════════════════════════\nconst idMatch = rawText.match(/ID:\\s*([A-Z0-9\\-]+)/i);\nconst signalId = idMatch ? idMatch[1] : '';\n\n// ═══════════════════════════════════════════════════════════════════════════\n// EXTRAIR TIMEFRAME\n// ═══════════════════════════════════════════════════════════════════════════\nconst tfMatch = rawText.match(/(\\d+[mhHdDwW])/i);\nconst timeframe = tfMatch ? tfMatch[1] : '';\n\n// ═══════════════════════════════════════════════════════════════════════════\n// EXTRAIR PREÇOS\n// ═══════════════════════════════════════════════════════════════════════════\nconst extractPrice = (label) => {\n  const regex = new RegExp(label + '\\\\s*:?\\\\s*([\\\\d.]+)', 'i');\n  const match = rawText.match(regex);\n  return match ? parseFloat(match[1]) : 0;\n};\n\nconst entry = extractPrice('ENTRY') || extractPrice('Entry');\nconst stopLoss = extractPrice('STOP LOSS') || extractPrice('SL');\nconst tp1 = extractPrice('TP1');\nconst tp2 = extractPrice('TP2');\nconst tp3 = extractPrice('TP3');\n\n// ═══════════════════════════════════════════════════════════════════════════\n// EXTRAIR INDICADORES (para logs)\n// ═══════════════════════════════════════════════════════════════════════════\nconst modeMatch = rawText.match(/Mode:\\s*(\\w+)/i);\nconst mode = modeMatch ? modeMatch[1] : 'Unknown';\n\n// ═══════════════════════════════════════════════════════════════════════════\n// CALCULAR SIDE PARA LIGHTER\n// ═══════════════════════════════════════════════════════════════════════════\nlet tradingSide = '';\nif (alertType === 'ENTRY_LONG') {\n  tradingSide = 'buy';\n} else if (alertType === 'ENTRY_SHORT') {\n  tradingSide = 'sell';\n} else if (['TP1_HIT', 'TP2_HIT', 'FULL_WIN', 'STOP_LOSS', 'PARTIAL'].includes(alertType)) {\n  tradingSide = direction === 'long' ? 'sell' : 'buy';\n}\n\n// ═══════════════════════════════════════════════════════════════════════════\n// RETORNAR DADOS ESTRUTURADOS\n// ═══════════════════════════════════════════════════════════════════════════\nreturn {\n  alertType,\n  signalId,\n  rawSymbol,\n  symbol: cleanSymbol,\n  marketIndex,\n  direction,\n  tradingSide,\n  grade,\n  entry,\n  stopLoss,\n  tp1,\n  tp2,\n  tp3,\n  timeframe,\n  mode,\n  rawMessage: rawText,\n  timestamp: new Date().toISOString(),\n  isValid: marketIndex >= 0 && alertType !== 'UNKNOWN'\n};\n"
+        "jsCode": "// ═══════════════════════════════════════════════════════════════════════════\n// PARSER DE SINAIS - Lighter Adaptive Signal System v2\n// Extrai dados estruturados dos alertas do TradingView\n// ═══════════════════════════════════════════════════════════════════════════\n\nconst input = $input.first().json;\nconst rawText = input.body || '';\n\n// ═══════════════════════════════════════════════════════════════════════════\n// MAPEAMENTO DE SIMBOLOS PARA MARKET_INDEX DA LIGHTER\n// ═══════════════════════════════════════════════════════════════════════════\nconst marketIndexMap = {\n  'ETH': 0, 'BTC': 1, 'SOL': 2, 'DOGE': 3, '1000PEPE': 4,\n  'WIF': 5, 'WLD': 6, 'XRP': 7, 'LINK': 8, 'AVAX': 9,\n  'NEAR': 10, 'DOT': 11, 'TON': 12, 'TAO': 13, 'POL': 14,\n  'TRUMP': 15, 'SUI': 16, '1000SHIB': 17, '1000BONK': 18, '1000FLOKI': 19,\n  'BERA': 20, 'FARTCOIN': 21, 'AI16Z': 22, 'POPCAT': 23, 'HYPE': 24,\n  'BNB': 25, 'JUP': 26, 'AAVE': 27, 'MKR': 28, 'ENA': 29,\n  'UNI': 30, 'APT': 31, 'SEI': 32, 'KAITO': 33, 'IP': 34,\n  'LTC': 35, 'CRV': 36, 'PENDLE': 37, 'ONDO': 38, 'ADA': 39,\n  'S': 40, 'VIRTUAL': 41, 'SPX': 42, 'TRX': 43, 'SYRUP': 44,\n  'PUMP': 45, 'LDO': 46, 'PENGU': 47, 'PAXG': 48, 'EIGEN': 49,\n  'ARB': 50, 'RESOLV': 51, 'GRASS': 52, 'ZORA': 53,\n};\n\n// ═══════════════════════════════════════════════════════════════════════════\n// DETECTAR TIPO DE ALERTA\n// ═══════════════════════════════════════════════════════════════════════════\nlet alertType = 'UNKNOWN';\nlet direction = '';\n\nif (rawText.includes('🟢 LONG')) {\n  alertType = 'ENTRY_LONG';\n  direction = 'long';\n} else if (rawText.includes('🔴 SHORT')) {\n  alertType = 'ENTRY_SHORT';\n  direction = 'short';\n} else if (rawText.includes('✅ TP1 HIT')) {\n  alertType = 'TP1_HIT';\n  direction = rawText.includes('LONG') ? 'long' : 'short';\n} else if (rawText.includes('✅ TP2 HIT')) {\n  alertType = 'TP2_HIT';\n  direction = rawText.includes('LONG') ? 'long' : 'short';\n} else if (rawText.includes('🎯 FULL WIN')) {\n  alertType = 'FULL_WIN';\n  direction = rawText.includes('LONG') ? 'long' : 'short';\n} else if (rawText.includes('❌ STOP LOSS')) {\n  alertType = 'STOP_LOSS';\n  direction = rawText.includes('LONG') ? 'long' : 'short';\n} else if (rawText.includes('🟡 PARTIAL')) {\n  alertType = 'PARTIAL';\n  direction = rawText.includes('LONG') ? 'long' : 'short';\n}\n\n// ═══════════════════════════════════════════════════════════════════════════\n// EXTRAIR SIMBOLO E GRADE\n// ═══════════════════════════════════════════════════════════════════════════\nconst gradeMatch = rawText.match(/\\[([ABC])\\]/);\nconst grade = gradeMatch ? gradeMatch[1] : 'C';\n\nlet rawSymbol = '';\nconst exchangeSymbolMatch = rawText.match(/(?:BINANCE|BYBIT|OKX|COINBASE|KRAKEN|MEXC|KUCOIN|GATEIO|HUOBI|BITGET):([A-Z0-9]+)/i);\nif (exchangeSymbolMatch) {\n  rawSymbol = exchangeSymbolMatch[1];\n} else {\n  const simpleMatch = rawText.match(/- ([A-Z0-9]+(?:USDT|USD)(?:\\.P)?)/im);\n  if (simpleMatch) {\n    rawSymbol = simpleMatch[1];\n  }\n}\n\nlet cleanSymbol = rawSymbol\n  .replace(/\\.P$/i, '')\n  .replace(/USDT$/i, '')\n  .replace(/USD$/i, '')\n  .toUpperCase();\n\nconst marketIndex = marketIndexMap[cleanSymbol] !== undefined ? marketIndexMap[cleanSymbol] : -1;\n\n// ═══════════════════════════════════════════════════════════════════════════\n// EXTRAIR SIGNAL ID e TIMEFRAME\n// ═══════════════════════════════════════════════════════════════════════════\nconst idMatch = rawText.match(/ID:\\s*([A-Z0-9\\-]+)/i);\nconst signalId = idMatch ? idMatch[1] : '';\n\nconst tfMatch = rawText.match(/(\\d+[mhHdDwW])/i);\nconst timeframe = tfMatch ? tfMatch[1] : '';\n\n// ═══════════════════════════════════════════════════════════════════════════\n// EXTRAIR PREÇOS\n// ═══════════════════════════════════════════════════════════════════════════\nconst extractPrice = (label) => {\n  const regex = new RegExp(label + '\\\\s*:?\\\\s*([\\\\d.]+)', 'i');\n  const match = rawText.match(regex);\n  return match ? parseFloat(match[1]) : 0;\n};\n\nconst entry = extractPrice('ENTRY') || extractPrice('Entry');\nconst stopLoss = extractPrice('STOP LOSS') || extractPrice('SL');\nconst tp1 = extractPrice('TP1');\nconst tp2 = extractPrice('TP2');\nconst tp3 = extractPrice('TP3');\n\nconst modeMatch = rawText.match(/Mode:\\s*(\\w+)/i);\nconst mode = modeMatch ? modeMatch[1] : 'Unknown';\n\n// ═══════════════════════════════════════════════════════════════════════════\n// CALCULAR SIDE PARA LIGHTER\n// ═══════════════════════════════════════════════════════════════════════════\nlet tradingSide = '';\nif (alertType === 'ENTRY_LONG') {\n  tradingSide = 'buy';\n} else if (alertType === 'ENTRY_SHORT') {\n  tradingSide = 'sell';\n} else if (['TP1_HIT', 'TP2_HIT', 'FULL_WIN', 'STOP_LOSS', 'PARTIAL'].includes(alertType)) {\n  tradingSide = direction === 'long' ? 'sell' : 'buy';\n}\n\n// ═══════════════════════════════════════════════════════════════════════════\n// RETORNAR DADOS ESTRUTURADOS\n// ═══════════════════════════════════════════════════════════════════════════\nreturn {\n  alertType,\n  signalId,\n  rawSymbol,\n  symbol: cleanSymbol,\n  marketIndex,\n  direction,\n  tradingSide,\n  grade,\n  entry,\n  stopLoss,\n  tp1,\n  tp2,\n  tp3,\n  timeframe,\n  mode,\n  rawMessage: rawText,\n  timestamp: new Date().toISOString(),\n  isValid: marketIndex >= 0 && alertType !== 'UNKNOWN'\n};\n"
       },
       "id": "f36e039b-30d3-45ff-a279-59da36c6174b",
       "name": "Parse Signal",
@@ -244,10 +244,12 @@
     },
     {
       "parameters": {
-        "resource": "position"
+        "resource": "trading",
+        "operation": "cancelAllOrders",
+        "tradingMarketIndex": "={{ $('Parse Signal').item.json.marketIndex }}"
       },
-      "id": "e7f267c3-cbaa-4b9c-98a8-c75e7b5c1a4c",
-      "name": "Check Existing Positions (Long)",
+      "id": "cancel-orders-long",
+      "name": "Cancel All Orders (Long)",
       "type": "n8n-nodes-lighter.lighter",
       "typeVersion": 1,
       "position": [
@@ -259,19 +261,88 @@
           "id": "YECMquMs6TtF97Od",
           "name": "Lighter account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "resource": "position"
+        "resource": "trading",
+        "operation": "cancelAllOrders",
+        "tradingMarketIndex": "={{ $('Parse Signal').item.json.marketIndex }}"
       },
-      "id": "b9f6034c-16e5-43ef-a126-28fad9dc3911",
-      "name": "Check Existing Positions (Short)",
+      "id": "cancel-orders-short",
+      "name": "Cancel All Orders (Short)",
       "type": "n8n-nodes-lighter.lighter",
       "typeVersion": 1,
       "position": [
         -1520,
-        -800
+        -704
+      ],
+      "credentials": {
+        "lighterApi": {
+          "id": "YECMquMs6TtF97Od",
+          "name": "Lighter account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "trading",
+        "operation": "closePosition",
+        "tradingMarketIndex": "={{ $('Parse Signal').item.json.marketIndex }}",
+        "tradingSlippage": 1
+      },
+      "id": "close-position-long",
+      "name": "Close Any Position (Long)",
+      "type": "n8n-nodes-lighter.lighter",
+      "typeVersion": 1,
+      "position": [
+        -1296,
+        -992
+      ],
+      "credentials": {
+        "lighterApi": {
+          "id": "YECMquMs6TtF97Od",
+          "name": "Lighter account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "trading",
+        "operation": "closePosition",
+        "tradingMarketIndex": "={{ $('Parse Signal').item.json.marketIndex }}",
+        "tradingSlippage": 1
+      },
+      "id": "close-position-short",
+      "name": "Close Any Position (Short)",
+      "type": "n8n-nodes-lighter.lighter",
+      "typeVersion": 1,
+      "position": [
+        -1296,
+        -704
+      ],
+      "credentials": {
+        "lighterApi": {
+          "id": "YECMquMs6TtF97Od",
+          "name": "Lighter account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "accountIndex": "=701375"
+      },
+      "id": "get-balance-long",
+      "name": "Get Account Balance (Long)",
+      "type": "n8n-nodes-lighter.lighter",
+      "typeVersion": 1,
+      "position": [
+        -1072,
+        -992
       ],
       "credentials": {
         "lighterApi": {
@@ -279,6 +350,51 @@
           "name": "Lighter account"
         }
       }
+    },
+    {
+      "parameters": {
+        "accountIndex": "=701375"
+      },
+      "id": "get-balance-short",
+      "name": "Get Account Balance (Short)",
+      "type": "n8n-nodes-lighter.lighter",
+      "typeVersion": 1,
+      "position": [
+        -1072,
+        -704
+      ],
+      "credentials": {
+        "lighterApi": {
+          "id": "YECMquMs6TtF97Od",
+          "name": "Lighter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calcular tamanho da posição com alavancagem 20x\nconst account = $input.first().json;\nconst signal = $('Parse Signal').item.json;\n\n// Buscar saldo disponível\nlet availableBalance = 0;\nif (account.accounts && account.accounts.length > 0) {\n  availableBalance = parseFloat(account.accounts[0].available_balance || 0);\n} else if (account.available_balance) {\n  availableBalance = parseFloat(account.available_balance);\n}\n\n// Configuração de alavancagem\nconst leverage = 20;\n\n// Preço de entrada do sinal\nconst entryPrice = signal.entry || 0;\n\n// Calcular valor nocional (saldo * alavancagem)\nconst notionalValue = availableBalance * leverage;\n\n// Calcular tamanho da posição\nlet positionSize = 0;\nif (entryPrice > 0) {\n  positionSize = notionalValue / entryPrice;\n  // Arredondar para 6 casas decimais\n  positionSize = Math.floor(positionSize * 1000000) / 1000000;\n}\n\nreturn {\n  availableBalance,\n  leverage,\n  entryPrice,\n  notionalValue,\n  positionSize,\n  marketIndex: signal.marketIndex,\n  tradingSide: signal.tradingSide,\n  symbol: signal.symbol,\n  // TP/SL prices from signal\n  tp1: signal.tp1 || 0,\n  tp2: signal.tp2 || 0,\n  tp3: signal.tp3 || 0,\n  stopLoss: signal.stopLoss || 0\n};"
+      },
+      "id": "calc-size-long",
+      "name": "Calculate Size (Long)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -848,
+        -992
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calcular tamanho da posição com alavancagem 20x\nconst account = $input.first().json;\nconst signal = $('Parse Signal').item.json;\n\n// Buscar saldo disponível\nlet availableBalance = 0;\nif (account.accounts && account.accounts.length > 0) {\n  availableBalance = parseFloat(account.accounts[0].available_balance || 0);\n} else if (account.available_balance) {\n  availableBalance = parseFloat(account.available_balance);\n}\n\n// Configuração de alavancagem\nconst leverage = 20;\n\n// Preço de entrada do sinal\nconst entryPrice = signal.entry || 0;\n\n// Calcular valor nocional (saldo * alavancagem)\nconst notionalValue = availableBalance * leverage;\n\n// Calcular tamanho da posição\nlet positionSize = 0;\nif (entryPrice > 0) {\n  positionSize = notionalValue / entryPrice;\n  // Arredondar para 6 casas decimais\n  positionSize = Math.floor(positionSize * 1000000) / 1000000;\n}\n\nreturn {\n  availableBalance,\n  leverage,\n  entryPrice,\n  notionalValue,\n  positionSize,\n  marketIndex: signal.marketIndex,\n  tradingSide: signal.tradingSide,\n  symbol: signal.symbol,\n  // TP/SL prices from signal\n  tp1: signal.tp1 || 0,\n  tp2: signal.tp2 || 0,\n  tp3: signal.tp3 || 0,\n  stopLoss: signal.stopLoss || 0\n};"
+      },
+      "id": "calc-size-short",
+      "name": "Calculate Size (Short)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -848,
+        -704
+      ]
     },
     {
       "parameters": {
@@ -295,8 +411,8 @@
         "tradingTP3Percent": 34,
         "tradingSLPrice": "={{ $json.stopLoss }}"
       },
-      "id": "87f36536-5854-41ae-bf54-c12a1843e168",
-      "name": "Open Long Position",
+      "id": "open-long-brackets",
+      "name": "Open Long with Brackets",
       "type": "n8n-nodes-lighter.lighter",
       "typeVersion": 1,
       "position": [
@@ -326,13 +442,13 @@
         "tradingTP3Percent": 34,
         "tradingSLPrice": "={{ $json.stopLoss }}"
       },
-      "id": "65250505-9368-4629-a037-df5ba11a550a",
-      "name": "Open Short Position",
+      "id": "open-short-brackets",
+      "name": "Open Short with Brackets",
       "type": "n8n-nodes-lighter.lighter",
       "typeVersion": 1,
       "position": [
         -624,
-        -800
+        -704
       ],
       "credentials": {
         "lighterApi": {
@@ -351,7 +467,7 @@
       "typeVersion": 1,
       "position": [
         -1520,
-        -608
+        -416
       ],
       "credentials": {
         "lighterApi": {
@@ -370,7 +486,7 @@
       "typeVersion": 1,
       "position": [
         -1520,
-        -416
+        -224
       ],
       "credentials": {
         "lighterApi": {
@@ -391,7 +507,7 @@
       "typeVersion": 1,
       "position": [
         -1520,
-        -224
+        -32
       ],
       "credentials": {
         "lighterApi": {
@@ -412,7 +528,7 @@
       "typeVersion": 1,
       "position": [
         -1520,
-        -32
+        160
       ],
       "credentials": {
         "lighterApi": {
@@ -433,7 +549,7 @@
       "typeVersion": 1,
       "position": [
         -1520,
-        160
+        352
       ],
       "credentials": {
         "lighterApi": {
@@ -441,70 +557,6 @@
           "name": "Lighter account"
         }
       }
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "leftValue": "={{ $json.positions?.length }}",
-              "rightValue": 0,
-              "operator": {
-                "type": "number",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "aa6b6dff-1421-4df1-ab91-4bcb4e56dfd5",
-      "name": "No Existing Position? (Long)",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        -1296,
-        -992
-      ]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "leftValue": "={{ $json.positions?.length }}",
-              "rightValue": 0,
-              "operator": {
-                "type": "number",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "d0ebc745-5941-4b4a-abf4-a65fd1853a24",
-      "name": "No Existing Position? (Short)",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        -1296,
-        -800
-      ]
     },
     {
       "parameters": {
@@ -516,7 +568,7 @@
       "typeVersion": 2,
       "position": [
         -1296,
-        -608
+        -416
       ]
     },
     {
@@ -529,7 +581,7 @@
       "typeVersion": 2,
       "position": [
         -1296,
-        -416
+        -224
       ]
     },
     {
@@ -561,7 +613,7 @@
       "typeVersion": 2.2,
       "position": [
         -1072,
-        -608
+        -416
       ]
     },
     {
@@ -593,7 +645,7 @@
       "typeVersion": 2.2,
       "position": [
         -1072,
-        -416
+        -224
       ]
     },
     {
@@ -611,7 +663,7 @@
       "typeVersion": 1,
       "position": [
         -848,
-        -608
+        -416
       ],
       "credentials": {
         "lighterApi": {
@@ -635,7 +687,7 @@
       "typeVersion": 1,
       "position": [
         -848,
-        -416
+        -224
       ],
       "credentials": {
         "lighterApi": {
@@ -646,81 +698,17 @@
     },
     {
       "parameters": {
-        "content": "## Lighter Adaptive Signal Trading System\n\n### Fluxo do Workflow:\n\n1. **Webhook** recebe alertas do TradingView\n2. **Parser** extrai dados estruturados do texto\n3. **Validação** verifica se o sinal é válido\n4. **Router** direciona para o fluxo correto\n5. **Execução** abre posições com TP/SL via Lighter\n\n### Tipos de Alerta:\n- 🟢 ENTRY_LONG → Abre Long + TP1/TP2/TP3 + SL\n- 🔴 ENTRY_SHORT → Abre Short + TP1/TP2/TP3 + SL\n- ✅ TP1_HIT → Fecha 33% da posição\n- ✅ TP2_HIT → Fecha 50% da posição\n- 🎯 FULL_WIN → Fecha 100% da posição\n- ❌ STOP_LOSS → Fecha 100% da posição\n- 🟡 PARTIAL → Fecha posição (parcial)\n\n### Novidades v0.3.2:\n- Entry com brackets (TP/SL automáticos)\n- 3 níveis de Take Profit (33%/33%/34%)\n- Stop Loss automático ao abrir posição\n\n### Configuração:\n1. Configure as credenciais Lighter\n2. Configure a URL do Trading Backend\n3. Ajuste a alavancagem nos Calculate Size\n4. Configure o webhook no TradingView",
-        "height": 624,
-        "width": 340
+        "content": "## Lighter Adaptive Signal Trading System v2\n\n### Fluxo do Workflow:\n\n1. **Webhook** recebe alertas do TradingView\n2. **Parser** extrai dados estruturados do texto\n3. **Validação** verifica se o sinal é válido\n4. **Router** direciona para o fluxo correto\n5. **Execução** com suporte a FLIP de posição\n\n### Novidades v2 (Flip Support):\n- Cancel All Orders antes de nova entrada\n- Close Position antes de nova entrada\n- Suporta troca de LONG→SHORT ou SHORT→LONG\n- Entry com brackets (TP/SL automáticos)\n\n### Tipos de Alerta:\n- 🟢 ENTRY_LONG → Cancel→Close→Open Long+TP/SL\n- 🔴 ENTRY_SHORT → Cancel→Close→Open Short+TP/SL\n- ✅ TP1_HIT → Fecha 33% (manual fallback)\n- ✅ TP2_HIT → Fecha 50% (manual fallback)\n- 🎯 FULL_WIN → Fecha 100%\n- ❌ STOP_LOSS → Fecha 100%\n- 🟡 PARTIAL → Fecha posição\n\n### Configuração:\n1. Configure as credenciais Lighter\n2. Configure a URL do Trading Backend\n3. Ajuste a alavancagem nos Calculate Size\n4. Configure o webhook no TradingView",
+        "height": 700,
+        "width": 380
       },
       "id": "c348fdcd-03e8-4f43-b5ca-8658e2c25633",
       "name": "Sticky Note",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -3024,
-        -944
-      ]
-    },
-    {
-      "parameters": {
-        "accountIndex": "=701375"
-      },
-      "id": "c227b0bf-a321-4966-b4ac-795bc8dbd494",
-      "name": "Get Account Balance (Long)",
-      "type": "n8n-nodes-lighter.lighter",
-      "typeVersion": 1,
-      "position": [
-        -1072,
-        -992
-      ],
-      "credentials": {
-        "lighterApi": {
-          "id": "YECMquMs6TtF97Od",
-          "name": "Lighter account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "accountIndex": "=701375"
-      },
-      "id": "464bc2cf-4ad0-43de-9460-51c2c25e93fc",
-      "name": "Get Account Balance (Short)",
-      "type": "n8n-nodes-lighter.lighter",
-      "typeVersion": 1,
-      "position": [
-        -1072,
-        -800
-      ],
-      "credentials": {
-        "lighterApi": {
-          "id": "YECMquMs6TtF97Od",
-          "name": "Lighter account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Calcular tamanho da posição com alavancagem 20x\nconst account = $input.first().json;\nconst signal = $('Parse Signal').item.json;\n\n// Buscar saldo disponível\nlet availableBalance = 0;\nif (account.accounts && account.accounts.length > 0) {\n  availableBalance = parseFloat(account.accounts[0].available_balance || 0);\n} else if (account.available_balance) {\n  availableBalance = parseFloat(account.available_balance);\n}\n\n// Configuração de alavancagem\nconst leverage = 20;\n\n// Preço de entrada do sinal\nconst entryPrice = signal.entry || 0;\n\n// Calcular valor nocional (saldo * alavancagem)\nconst notionalValue = availableBalance * leverage;\n\n// Calcular tamanho da posição\nlet positionSize = 0;\nif (entryPrice > 0) {\n  positionSize = notionalValue / entryPrice;\n  // Arredondar para 6 casas decimais\n  positionSize = Math.floor(positionSize * 1000000) / 1000000;\n}\n\nreturn {\n  availableBalance,\n  leverage,\n  entryPrice,\n  notionalValue,\n  positionSize,\n  marketIndex: signal.marketIndex,\n  tradingSide: signal.tradingSide,\n  symbol: signal.symbol,\n  // TP/SL prices from signal\n  tp1: signal.tp1 || 0,\n  tp2: signal.tp2 || 0,\n  tp3: signal.tp3 || 0,\n  stopLoss: signal.stopLoss || 0\n};"
-      },
-      "id": "82257122-62e4-4378-ba23-6b0b0f3ad656",
-      "name": "Calculate Size (Long)",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -848,
-        -992
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Calcular tamanho da posição com alavancagem 20x\nconst account = $input.first().json;\nconst signal = $('Parse Signal').item.json;\n\n// Buscar saldo disponível\nlet availableBalance = 0;\nif (account.accounts && account.accounts.length > 0) {\n  availableBalance = parseFloat(account.accounts[0].available_balance || 0);\n} else if (account.available_balance) {\n  availableBalance = parseFloat(account.available_balance);\n}\n\n// Configuração de alavancagem\nconst leverage = 20;\n\n// Preço de entrada do sinal\nconst entryPrice = signal.entry || 0;\n\n// Calcular valor nocional (saldo * alavancagem)\nconst notionalValue = availableBalance * leverage;\n\n// Calcular tamanho da posição\nlet positionSize = 0;\nif (entryPrice > 0) {\n  positionSize = notionalValue / entryPrice;\n  // Arredondar para 6 casas decimais\n  positionSize = Math.floor(positionSize * 1000000) / 1000000;\n}\n\nreturn {\n  availableBalance,\n  leverage,\n  entryPrice,\n  notionalValue,\n  positionSize,\n  marketIndex: signal.marketIndex,\n  tradingSide: signal.tradingSide,\n  symbol: signal.symbol,\n  // TP/SL prices from signal\n  tp1: signal.tp1 || 0,\n  tp2: signal.tp2 || 0,\n  tp3: signal.tp3 || 0,\n  stopLoss: signal.stopLoss || 0\n};"
-      },
-      "id": "b7105366-468b-497b-8c67-afe85b278983",
-      "name": "Calculate Size (Short)",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -848,
-        -800
+        -2880,
+        -1050
       ]
     },
     {
@@ -834,202 +822,9 @@
           "name": "Lighter account"
         }
       }
-    },
-    {
-      "parameters": {
-        "resource": "trading",
-        "operation": "cancelAllOrders",
-        "tradingMarketIndex": 1
-      },
-      "id": "24ed202f-2efd-4192-bde6-e0c5f461c5ad",
-      "name": "Cancel All Orders",
-      "type": "n8n-nodes-lighter.lighter",
-      "typeVersion": 1,
-      "position": [
-        -2240,
-        672
-      ],
-      "credentials": {
-        "lighterApi": {
-          "id": "YECMquMs6TtF97Od",
-          "name": "Lighter account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "resource": "position"
-      },
-      "id": "263238bd-f610-4259-8b89-3c56df351ce5",
-      "name": "Get All Positions",
-      "type": "n8n-nodes-lighter.lighter",
-      "typeVersion": 1,
-      "position": [
-        -2016,
-        672
-      ],
-      "credentials": {
-        "lighterApi": {
-          "id": "YECMquMs6TtF97Od",
-          "name": "Lighter account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Para cada posição, retornar market_index para fechar\nconst positions = $input.first().json.positions || [];\nconst results = [];\n\nfor (const pos of positions) {\n  if (pos.size !== 0) {\n    results.push({\n      market_index: pos.market_index,\n      size: pos.size,\n      side: pos.side\n    });\n  }\n}\n\nreturn results.length > 0 ? results : [{ noPositions: true }];"
-      },
-      "id": "55a43270-a780-4d8f-a049-0b1fa9c4da18",
-      "name": "Extract Positions",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -1808,
-        672
-      ]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "leftValue": "={{ $json.noPositions }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "notEquals"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "48496a2e-4f19-47b3-8746-6ab796ee0037",
-      "name": "Has Positions?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        -1584,
-        672
-      ]
-    },
-    {
-      "parameters": {
-        "resource": "trading",
-        "operation": "closePosition",
-        "tradingMarketIndex": "={{ $json.market_index }}",
-        "tradingSlippage": 1
-      },
-      "id": "53993dc3-26e9-41ef-a872-8bb8d1a3f2ad",
-      "name": "Close Each Position",
-      "type": "n8n-nodes-lighter.lighter",
-      "typeVersion": 1,
-      "position": [
-        -1360,
-        672
-      ],
-      "credentials": {
-        "lighterApi": {
-          "id": "YECMquMs6TtF97Od",
-          "name": "Lighter account"
-        }
-      }
-    },
-    {
-      "parameters": {},
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
-      "position": [
-        -2464,
-        672
-      ],
-      "id": "32946242-a07e-4868-af3b-558a16d4ddf0",
-      "name": "When clicking ‘Execute workflow’"
-    },
-    {
-      "parameters": {
-        "text": "={{ $('Parse Signal').item.json.rawMessage }}",
-        "additionalFields": {}
-      },
-      "type": "n8n-nodes-base.twitter",
-      "typeVersion": 2,
-      "position": [
-        240,
-        -496
-      ],
-      "id": "7e232103-6cae-4d20-b352-e11f3620aca0",
-      "name": "Post Signal",
-      "alwaysOutputData": false,
-      "credentials": {
-        "twitterOAuth2Api": {
-          "id": "vaNtkV4MjHQZYgcu",
-          "name": "X account MX3 Dev"
-        }
-      },
-      "disabled": true,
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "phone": "120363421388630566@g.us",
-        "body": "={{ $('Parse Signal').item.json.rawMessage }}",
-        "additionalOptions": {}
-      },
-      "type": "n8n-nodes-wuzapi.wuzapiMessage",
-      "typeVersion": 1,
-      "position": [
-        16,
-        -496
-      ],
-      "id": "0e2abfe9-efa4-4daa-8850-a1f9bc94db8a",
-      "name": "Trade Alert",
-      "credentials": {
-        "wuzapiApi": {
-          "id": "wDYq04bZL7BPWW8F",
-          "name": "Wuzapi MX3"
-        }
-      },
-      "disabled": true
     }
   ],
-  "pinData": {
-    "TradingView Webhook": [
-      {
-        "json": {
-          "headers": {
-            "connection": "close",
-            "host": "automation.mx3dev.com",
-            "x-forwarded-scheme": "https",
-            "x-forwarded-proto": "https",
-            "x-forwarded-for": "34.212.75.30",
-            "x-real-ip": "34.212.75.30",
-            "content-length": "255",
-            "user-agent": "Go-http-client/1.1",
-            "content-type": "text/plain; charset=utf-8",
-            "accept-encoding": "gzip"
-          },
-          "params": {},
-          "query": {},
-          "body": "✅ TP1 HIT - SHORT [B] - BINANCE:BTCUSDT\n🔑 ID: BTC5m-S9FCYW\n📊 Timeframe: 5m | Mode: Balanced\n\n⏱️ Duration: 5m\n\n💰 Entry: 90104\n🎯 TP1: 89933.32\n📈 P&L: +0.19%\n\n🔄 Next: TP2 at 89783.97 (+0.17% away)\n💡 Suggestion: Move SL to breakeven",
-          "webhookUrl": "https://automation.mx3dev.com/webhook/lighter-signal",
-          "executionMode": "production"
-        },
-        "binary": {
-          "data": {
-            "data": "4pyFIFRQMSBISVQgLSBTSE9SVCBbQl0gLSBCSU5BTkNFOkJUQ1VTRFQK8J+UkSBJRDogQlRDNW0tUzlGQ1lXCvCfk4ogVGltZWZyYW1lOiA1bSB8IE1vZGU6IEJhbGFuY2VkCgrij7HvuI8gRHVyYXRpb246IDVtCgrwn5KwIEVudHJ5OiA5MDEwNArwn46vIFRQMTogODk5MzMuMzIK8J+TiCBQJkw6ICswLjE5JQoK8J+UhCBOZXh0OiBUUDIgYXQgODk3ODMuOTcgKCswLjE3JSBhd2F5KQrwn5KhIFN1Z2dlc3Rpb246IE1vdmUgU0wgdG8gYnJlYWtldmVu",
-            "mimeType": "text/plain"
-          }
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "connections": {
     "TradingView Webhook": {
       "main": [
@@ -1069,14 +864,14 @@
       "main": [
         [
           {
-            "node": "Check Existing Positions (Long)",
+            "node": "Cancel All Orders (Long)",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Check Existing Positions (Short)",
+            "node": "Cancel All Orders (Short)",
             "type": "main",
             "index": 0
           }
@@ -1118,29 +913,29 @@
         ]
       ]
     },
-    "Check Existing Positions (Long)": {
+    "Cancel All Orders (Long)": {
       "main": [
         [
           {
-            "node": "No Existing Position? (Long)",
+            "node": "Close Any Position (Long)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Check Existing Positions (Short)": {
+    "Cancel All Orders (Short)": {
       "main": [
         [
           {
-            "node": "No Existing Position? (Short)",
+            "node": "Close Any Position (Short)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "No Existing Position? (Long)": {
+    "Close Any Position (Long)": {
       "main": [
         [
           {
@@ -1151,7 +946,7 @@
         ]
       ]
     },
-    "No Existing Position? (Short)": {
+    "Close Any Position (Short)": {
       "main": [
         [
           {
@@ -1162,22 +957,44 @@
         ]
       ]
     },
-    "Open Long Position": {
+    "Get Account Balance (Long)": {
       "main": [
         [
           {
-            "node": "Trade Alert",
+            "node": "Calculate Size (Long)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Open Short Position": {
+    "Get Account Balance (Short)": {
       "main": [
         [
           {
-            "node": "Trade Alert",
+            "node": "Calculate Size (Short)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Size (Long)": {
+      "main": [
+        [
+          {
+            "node": "Open Long with Brackets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Size (Short)": {
+      "main": [
+        [
+          {
+            "node": "Open Short with Brackets",
             "type": "main",
             "index": 0
           }
@@ -1249,171 +1066,6 @@
           }
         ]
       ]
-    },
-    "Close 33% (TP1)": {
-      "main": [
-        [
-          {
-            "node": "Trade Alert",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Close 50% (TP2)": {
-      "main": [
-        [
-          {
-            "node": "Trade Alert",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Close Position (Full Win)": {
-      "main": [
-        [
-          {
-            "node": "Trade Alert",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Close Position (Stop Loss)": {
-      "main": [
-        [
-          {
-            "node": "Trade Alert",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Close Position (Partial)": {
-      "main": [
-        [
-          {
-            "node": "Trade Alert",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get Account Balance (Long)": {
-      "main": [
-        [
-          {
-            "node": "Calculate Size (Long)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Calculate Size (Long)": {
-      "main": [
-        [
-          {
-            "node": "Open Long Position",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get Account Balance (Short)": {
-      "main": [
-        [
-          {
-            "node": "Calculate Size (Short)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Calculate Size (Short)": {
-      "main": [
-        [
-          {
-            "node": "Open Short Position",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Cancel All Orders": {
-      "main": [
-        [
-          {
-            "node": "Get All Positions",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get All Positions": {
-      "main": [
-        [
-          {
-            "node": "Extract Positions",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Extract Positions": {
-      "main": [
-        [
-          {
-            "node": "Has Positions?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Has Positions?": {
-      "main": [
-        [
-          {
-            "node": "Close Each Position",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "When clicking ‘Execute workflow’": {
-      "main": [
-        [
-          {
-            "node": "Cancel All Orders",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Trade Alert": {
-      "main": [
-        [
-          {
-            "node": "Post Signal",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
     }
   },
   "active": true,
@@ -1424,7 +1076,7 @@
     "availableInMCP": false,
     "errorWorkflow": "zjd2xA67PUToONL1"
   },
-  "versionId": "67527deb-9a61-481a-8999-6017b7193017",
+  "versionId": "67527deb-9a61-481a-8999-6017b7193018",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "be2e85c12d6d5bc51db8ebc43985deb72a4b5b24d5cceacf44565f768e2de1fe"
