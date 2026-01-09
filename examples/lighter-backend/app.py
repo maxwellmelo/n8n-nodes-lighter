@@ -482,6 +482,480 @@ async def create_market_order():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+# =============================================================================
+# TAKE PROFIT / STOP LOSS ORDERS
+# =============================================================================
+
+
+@app.route("/api/order/tp", methods=["POST"])
+@require_auth
+@async_route
+async def create_tp_order():
+    """
+    Create a Take Profit order.
+    Triggers when mark price reaches trigger_price, then executes at price.
+    For LONG positions: is_ask=True (SELL to take profit)
+    For SHORT positions: is_ask=False (BUY to take profit)
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSON body required"}), 400
+
+        client = get_client()
+
+        market_index = int(data.get("market_index", 0))
+        side = data.get("side", "sell").lower()
+        size = float(data.get("size", 0))
+        trigger_price = float(data.get("trigger_price", 0))
+        price = float(data.get("price", 0)) or trigger_price
+        reduce_only = bool(data.get("reduce_only", True))
+        client_order_id = int(data.get("client_order_id", 0)) or int(time.time() * 1000)
+
+        if size <= 0:
+            return jsonify({"error": "size must be > 0"}), 400
+        if trigger_price <= 0:
+            return jsonify({"error": "trigger_price must be > 0"}), 400
+
+        is_ask = side == "sell"
+
+        # Get market decimals for proper conversion
+        size_dec, price_dec = await get_market_decimals(market_index)
+        base_amount = convert_size_to_base_amount(size, size_dec)
+        trigger_price_int = convert_price_to_int(trigger_price, price_dec)
+        price_int = convert_price_to_int(price, price_dec)
+
+        # Execute with automatic retry on nonce errors
+        tx, response, err = await execute_with_nonce_retry(
+            client.create_tp_order,
+            market_index=market_index,
+            client_order_index=client_order_id,
+            base_amount=base_amount,
+            trigger_price=trigger_price_int,
+            price=price_int,
+            is_ask=is_ask,
+            reduce_only=reduce_only,
+        )
+
+        if err:
+            return jsonify({"success": False, "error": str(err)}), 400
+
+        return jsonify(
+            {
+                "success": True,
+                "tx_hash": response.tx_hash if response else None,
+                "order": {
+                    "market_index": market_index,
+                    "side": side,
+                    "size": size,
+                    "trigger_price": trigger_price,
+                    "price": price,
+                    "type": "take_profit",
+                    "reduce_only": reduce_only,
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.exception("Error creating TP order")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/order/tp-limit", methods=["POST"])
+@require_auth
+@async_route
+async def create_tp_limit_order():
+    """
+    Create a Take Profit Limit order.
+    Triggers when mark price reaches trigger_price, then places limit order at price.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSON body required"}), 400
+
+        client = get_client()
+
+        market_index = int(data.get("market_index", 0))
+        side = data.get("side", "sell").lower()
+        size = float(data.get("size", 0))
+        trigger_price = float(data.get("trigger_price", 0))
+        price = float(data.get("price", 0)) or trigger_price
+        reduce_only = bool(data.get("reduce_only", True))
+        client_order_id = int(data.get("client_order_id", 0)) or int(time.time() * 1000)
+
+        if size <= 0:
+            return jsonify({"error": "size must be > 0"}), 400
+        if trigger_price <= 0:
+            return jsonify({"error": "trigger_price must be > 0"}), 400
+
+        is_ask = side == "sell"
+
+        # Get market decimals for proper conversion
+        size_dec, price_dec = await get_market_decimals(market_index)
+        base_amount = convert_size_to_base_amount(size, size_dec)
+        trigger_price_int = convert_price_to_int(trigger_price, price_dec)
+        price_int = convert_price_to_int(price, price_dec)
+
+        # Execute with automatic retry on nonce errors
+        tx, response, err = await execute_with_nonce_retry(
+            client.create_tp_limit_order,
+            market_index=market_index,
+            client_order_index=client_order_id,
+            base_amount=base_amount,
+            trigger_price=trigger_price_int,
+            price=price_int,
+            is_ask=is_ask,
+            reduce_only=reduce_only,
+        )
+
+        if err:
+            return jsonify({"success": False, "error": str(err)}), 400
+
+        return jsonify(
+            {
+                "success": True,
+                "tx_hash": response.tx_hash if response else None,
+                "order": {
+                    "market_index": market_index,
+                    "side": side,
+                    "size": size,
+                    "trigger_price": trigger_price,
+                    "price": price,
+                    "type": "take_profit_limit",
+                    "reduce_only": reduce_only,
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.exception("Error creating TP Limit order")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/order/sl", methods=["POST"])
+@require_auth
+@async_route
+async def create_sl_order():
+    """
+    Create a Stop Loss order.
+    Triggers when mark price reaches trigger_price, then executes at price.
+    For LONG positions: is_ask=True (SELL to stop loss)
+    For SHORT positions: is_ask=False (BUY to stop loss)
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSON body required"}), 400
+
+        client = get_client()
+
+        market_index = int(data.get("market_index", 0))
+        side = data.get("side", "sell").lower()
+        size = float(data.get("size", 0))
+        trigger_price = float(data.get("trigger_price", 0))
+        price = float(data.get("price", 0)) or trigger_price
+        reduce_only = bool(data.get("reduce_only", True))
+        client_order_id = int(data.get("client_order_id", 0)) or int(time.time() * 1000)
+
+        if size <= 0:
+            return jsonify({"error": "size must be > 0"}), 400
+        if trigger_price <= 0:
+            return jsonify({"error": "trigger_price must be > 0"}), 400
+
+        is_ask = side == "sell"
+
+        # Get market decimals for proper conversion
+        size_dec, price_dec = await get_market_decimals(market_index)
+        base_amount = convert_size_to_base_amount(size, size_dec)
+        trigger_price_int = convert_price_to_int(trigger_price, price_dec)
+        price_int = convert_price_to_int(price, price_dec)
+
+        # Execute with automatic retry on nonce errors
+        tx, response, err = await execute_with_nonce_retry(
+            client.create_sl_order,
+            market_index=market_index,
+            client_order_index=client_order_id,
+            base_amount=base_amount,
+            trigger_price=trigger_price_int,
+            price=price_int,
+            is_ask=is_ask,
+            reduce_only=reduce_only,
+        )
+
+        if err:
+            return jsonify({"success": False, "error": str(err)}), 400
+
+        return jsonify(
+            {
+                "success": True,
+                "tx_hash": response.tx_hash if response else None,
+                "order": {
+                    "market_index": market_index,
+                    "side": side,
+                    "size": size,
+                    "trigger_price": trigger_price,
+                    "price": price,
+                    "type": "stop_loss",
+                    "reduce_only": reduce_only,
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.exception("Error creating SL order")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/order/sl-limit", methods=["POST"])
+@require_auth
+@async_route
+async def create_sl_limit_order():
+    """
+    Create a Stop Loss Limit order.
+    Triggers when mark price reaches trigger_price, then places limit order at price.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSON body required"}), 400
+
+        client = get_client()
+
+        market_index = int(data.get("market_index", 0))
+        side = data.get("side", "sell").lower()
+        size = float(data.get("size", 0))
+        trigger_price = float(data.get("trigger_price", 0))
+        price = float(data.get("price", 0)) or trigger_price
+        reduce_only = bool(data.get("reduce_only", True))
+        client_order_id = int(data.get("client_order_id", 0)) or int(time.time() * 1000)
+
+        if size <= 0:
+            return jsonify({"error": "size must be > 0"}), 400
+        if trigger_price <= 0:
+            return jsonify({"error": "trigger_price must be > 0"}), 400
+
+        is_ask = side == "sell"
+
+        # Get market decimals for proper conversion
+        size_dec, price_dec = await get_market_decimals(market_index)
+        base_amount = convert_size_to_base_amount(size, size_dec)
+        trigger_price_int = convert_price_to_int(trigger_price, price_dec)
+        price_int = convert_price_to_int(price, price_dec)
+
+        # Execute with automatic retry on nonce errors
+        tx, response, err = await execute_with_nonce_retry(
+            client.create_sl_limit_order,
+            market_index=market_index,
+            client_order_index=client_order_id,
+            base_amount=base_amount,
+            trigger_price=trigger_price_int,
+            price=price_int,
+            is_ask=is_ask,
+            reduce_only=reduce_only,
+        )
+
+        if err:
+            return jsonify({"success": False, "error": str(err)}), 400
+
+        return jsonify(
+            {
+                "success": True,
+                "tx_hash": response.tx_hash if response else None,
+                "order": {
+                    "market_index": market_index,
+                    "side": side,
+                    "size": size,
+                    "trigger_price": trigger_price,
+                    "price": price,
+                    "type": "stop_loss_limit",
+                    "reduce_only": reduce_only,
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.exception("Error creating SL Limit order")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/order/entry-with-brackets", methods=["POST"])
+@require_auth
+@async_route
+async def create_entry_with_brackets():
+    """
+    Create entry order with TP and SL brackets in a single call.
+    This is more efficient and ensures all orders are placed together.
+
+    Body:
+    {
+        "market_index": 0,
+        "side": "buy",
+        "size": 0.1,
+        "slippage": 0.5,
+        "take_profits": [
+            {"trigger_price": 3600.00, "size_percent": 33},
+            {"trigger_price": 3700.00, "size_percent": 33},
+            {"trigger_price": 3800.00, "size_percent": 34}
+        ],
+        "stop_loss": {
+            "trigger_price": 3300.00
+        }
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSON body required"}), 400
+
+        client = get_client()
+        order_api = get_order_api()
+
+        market_index = int(data.get("market_index", 0))
+        side = data.get("side", "buy").lower()
+        size = float(data.get("size", 0))
+        slippage = float(data.get("slippage", 0.5)) / 100
+
+        take_profits = data.get("take_profits", [])
+        sl_config = data.get("stop_loss", {})
+
+        if size <= 0:
+            return jsonify({"error": "size must be > 0"}), 400
+
+        results = {
+            "entry": None,
+            "take_profits": [],
+            "stop_loss": None,
+            "errors": []
+        }
+
+        # Get market decimals
+        size_dec, price_dec = await get_market_decimals(market_index)
+        base_amount = convert_size_to_base_amount(size, size_dec)
+        is_ask_entry = side == "sell"
+
+        # 1. Create entry order (market)
+        orderbook = await order_api.order_book_orders(market_id=market_index, limit=1)
+
+        if is_ask_entry and orderbook.bids:
+            current_price = float(orderbook.bids[0].price)
+        elif not is_ask_entry and orderbook.asks:
+            current_price = float(orderbook.asks[0].price)
+        else:
+            return jsonify({"error": "Could not get current price"}), 400
+
+        slippage_multiplier = (1 - slippage) if is_ask_entry else (1 + slippage)
+        execution_price = current_price * slippage_multiplier
+        price_int = convert_price_to_int(execution_price, price_dec)
+
+        tx, response, err = await execute_with_nonce_retry(
+            client.create_order,
+            market_index=market_index,
+            client_order_index=int(time.time() * 1000),
+            base_amount=base_amount,
+            price=price_int,
+            is_ask=is_ask_entry,
+            order_type=client.ORDER_TYPE_MARKET,
+            time_in_force=client.ORDER_TIME_IN_FORCE_IMMEDIATE_OR_CANCEL,
+            reduce_only=False,
+            order_expiry=client.DEFAULT_IOC_EXPIRY,
+        )
+
+        if err:
+            results["errors"].append({"type": "entry", "error": str(err)})
+            return jsonify({"success": False, **results}), 400
+
+        results["entry"] = {
+            "tx_hash": response.tx_hash if response else None,
+            "side": side,
+            "size": size,
+            "execution_price": execution_price,
+        }
+
+        # For brackets: opposite side of entry
+        # LONG entry (buy) = SELL for TP/SL
+        # SHORT entry (sell) = BUY for TP/SL
+        bracket_is_ask = not is_ask_entry
+        bracket_side = "sell" if bracket_is_ask else "buy"
+
+        # 2. Create Take Profit orders
+        for i, tp_config in enumerate(take_profits):
+            if not tp_config.get("trigger_price"):
+                continue
+
+            tp_trigger = float(tp_config["trigger_price"])
+            tp_price = float(tp_config.get("price", tp_trigger))
+            size_percent = float(tp_config.get("size_percent", 100))
+            tp_size = size * (size_percent / 100)
+
+            tp_base_amount = convert_size_to_base_amount(tp_size, size_dec)
+            tp_trigger_int = convert_price_to_int(tp_trigger, price_dec)
+            tp_price_int = convert_price_to_int(tp_price, price_dec)
+
+            tx, response, err = await execute_with_nonce_retry(
+                client.create_tp_order,
+                market_index=market_index,
+                client_order_index=int(time.time() * 1000) + i + 1,
+                base_amount=tp_base_amount,
+                trigger_price=tp_trigger_int,
+                price=tp_price_int,
+                is_ask=bracket_is_ask,
+                reduce_only=True,
+            )
+
+            if err:
+                results["errors"].append({"type": f"take_profit_{i+1}", "error": str(err)})
+            else:
+                results["take_profits"].append({
+                    "tx_hash": response.tx_hash if response else None,
+                    "trigger_price": tp_trigger,
+                    "price": tp_price,
+                    "size": tp_size,
+                    "size_percent": size_percent,
+                })
+
+        # 3. Create Stop Loss order
+        if sl_config.get("trigger_price"):
+            sl_trigger = float(sl_config["trigger_price"])
+            sl_price = float(sl_config.get("price", sl_trigger))
+            sl_size_percent = float(sl_config.get("size_percent", 100))
+            sl_size = size * (sl_size_percent / 100)
+
+            sl_base_amount = convert_size_to_base_amount(sl_size, size_dec)
+            sl_trigger_int = convert_price_to_int(sl_trigger, price_dec)
+            sl_price_int = convert_price_to_int(sl_price, price_dec)
+
+            tx, response, err = await execute_with_nonce_retry(
+                client.create_sl_order,
+                market_index=market_index,
+                client_order_index=int(time.time() * 1000) + len(take_profits) + 1,
+                base_amount=sl_base_amount,
+                trigger_price=sl_trigger_int,
+                price=sl_price_int,
+                is_ask=bracket_is_ask,
+                reduce_only=True,
+            )
+
+            if err:
+                results["errors"].append({"type": "stop_loss", "error": str(err)})
+            else:
+                results["stop_loss"] = {
+                    "tx_hash": response.tx_hash if response else None,
+                    "trigger_price": sl_trigger,
+                    "price": sl_price,
+                    "size": sl_size,
+                }
+
+        return jsonify({
+            "success": len(results["errors"]) == 0,
+            **results
+        })
+
+    except Exception as e:
+        logger.exception("Error creating entry with brackets")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/api/order/cancel", methods=["POST"])
 @require_auth
 @async_route

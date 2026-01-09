@@ -522,6 +522,36 @@ export class Lighter implements INodeType {
 						action: 'Create market order',
 					},
 					{
+						name: 'Create Take Profit Order',
+						value: 'createTPOrder',
+						description: 'Create a take-profit order that triggers at a specific price',
+						action: 'Create TP order',
+					},
+					{
+						name: 'Create Take Profit Limit Order',
+						value: 'createTPLimitOrder',
+						description: 'Create a take-profit limit order',
+						action: 'Create TP limit order',
+					},
+					{
+						name: 'Create Stop Loss Order',
+						value: 'createSLOrder',
+						description: 'Create a stop-loss order that triggers at a specific price',
+						action: 'Create SL order',
+					},
+					{
+						name: 'Create Stop Loss Limit Order',
+						value: 'createSLLimitOrder',
+						description: 'Create a stop-loss limit order',
+						action: 'Create SL limit order',
+					},
+					{
+						name: 'Create Entry with Brackets',
+						value: 'createEntryWithBrackets',
+						description: 'Create market entry with TP and SL orders in one call',
+						action: 'Create entry with brackets',
+					},
+					{
 						name: 'Cancel Order',
 						value: 'cancelOrder',
 						description: 'Cancel a specific order',
@@ -571,7 +601,15 @@ export class Lighter implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['trading'],
-						operation: ['createLimitOrder', 'createMarketOrder'],
+						operation: [
+							'createLimitOrder',
+							'createMarketOrder',
+							'createTPOrder',
+							'createTPLimitOrder',
+							'createSLOrder',
+							'createSLLimitOrder',
+							'createEntryWithBrackets',
+						],
 					},
 				},
 				options: [
@@ -589,7 +627,15 @@ export class Lighter implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['trading'],
-						operation: ['createLimitOrder', 'createMarketOrder'],
+						operation: [
+							'createLimitOrder',
+							'createMarketOrder',
+							'createTPOrder',
+							'createTPLimitOrder',
+							'createSLOrder',
+							'createSLLimitOrder',
+							'createEntryWithBrackets',
+						],
 					},
 				},
 				default: 0.01,
@@ -621,7 +667,7 @@ export class Lighter implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['trading'],
-						operation: ['createMarketOrder', 'closePosition'],
+						operation: ['createMarketOrder', 'closePosition', 'createEntryWithBrackets'],
 					},
 				},
 				default: 0.5,
@@ -637,11 +683,19 @@ export class Lighter implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['trading'],
-						operation: ['createLimitOrder', 'createMarketOrder'],
+						operation: [
+							'createLimitOrder',
+							'createMarketOrder',
+							'createTPOrder',
+							'createTPLimitOrder',
+							'createSLOrder',
+							'createSLLimitOrder',
+						],
 					},
 				},
 				default: false,
-				description: 'Whether order can only reduce an existing position',
+				description:
+					'Whether order can only reduce an existing position (recommended true for TP/SL)',
 			},
 
 			// Trading Parameters - Post Only
@@ -657,6 +711,149 @@ export class Lighter implements INodeType {
 				},
 				default: false,
 				description: 'Whether order should be maker only',
+			},
+
+			// Trading Parameters - Trigger Price (for TP/SL orders)
+			{
+				displayName: 'Trigger Price',
+				name: 'tradingTriggerPrice',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: [
+							'createTPOrder',
+							'createTPLimitOrder',
+							'createSLOrder',
+							'createSLLimitOrder',
+						],
+					},
+				},
+				default: 0,
+				typeOptions: { numberPrecision: 2 },
+				description: 'Price that triggers the conditional order',
+			},
+
+			// Trading Parameters - Execution Price (for TP/SL orders)
+			{
+				displayName: 'Execution Price',
+				name: 'tradingExecutionPrice',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: [
+							'createTPOrder',
+							'createTPLimitOrder',
+							'createSLOrder',
+							'createSLLimitOrder',
+						],
+					},
+				},
+				default: 0,
+				typeOptions: { numberPrecision: 2 },
+				description:
+					'Price at which order executes after trigger (leave 0 to use trigger price)',
+			},
+
+			// Trading Parameters - Take Profits (for entry with brackets)
+			{
+				displayName: 'Take Profit 1 Price',
+				name: 'tradingTP1Price',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['createEntryWithBrackets'],
+					},
+				},
+				default: 0,
+				typeOptions: { numberPrecision: 2 },
+				description: 'Take profit 1 trigger price (leave 0 to skip)',
+			},
+			{
+				displayName: 'Take Profit 1 Size %',
+				name: 'tradingTP1Percent',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['createEntryWithBrackets'],
+					},
+				},
+				default: 33,
+				typeOptions: { minValue: 0, maxValue: 100 },
+				description: 'Percentage of position to close at TP1',
+			},
+			{
+				displayName: 'Take Profit 2 Price',
+				name: 'tradingTP2Price',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['createEntryWithBrackets'],
+					},
+				},
+				default: 0,
+				typeOptions: { numberPrecision: 2 },
+				description: 'Take profit 2 trigger price (leave 0 to skip)',
+			},
+			{
+				displayName: 'Take Profit 2 Size %',
+				name: 'tradingTP2Percent',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['createEntryWithBrackets'],
+					},
+				},
+				default: 33,
+				typeOptions: { minValue: 0, maxValue: 100 },
+				description: 'Percentage of position to close at TP2',
+			},
+			{
+				displayName: 'Take Profit 3 Price',
+				name: 'tradingTP3Price',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['createEntryWithBrackets'],
+					},
+				},
+				default: 0,
+				typeOptions: { numberPrecision: 2 },
+				description: 'Take profit 3 trigger price (leave 0 to skip)',
+			},
+			{
+				displayName: 'Take Profit 3 Size %',
+				name: 'tradingTP3Percent',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['createEntryWithBrackets'],
+					},
+				},
+				default: 34,
+				typeOptions: { minValue: 0, maxValue: 100 },
+				description: 'Percentage of position to close at TP3',
+			},
+			{
+				displayName: 'Stop Loss Price',
+				name: 'tradingSLPrice',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['trading'],
+						operation: ['createEntryWithBrackets'],
+					},
+				},
+				default: 0,
+				typeOptions: { numberPrecision: 2 },
+				description: 'Stop loss trigger price (leave 0 to skip)',
 			},
 
 			// Trading Parameters - Order Index
@@ -1327,6 +1524,98 @@ export class Lighter implements INodeType {
 							market_index: marketIndex,
 							leverage: this.getNodeParameter('tradingLeverage', i) as number,
 							margin_mode: this.getNodeParameter('tradingMarginMode', i) as string,
+						};
+					} else if (operation === 'createTPOrder') {
+						backendEndpoint = '/api/order/tp';
+						const triggerPrice = this.getNodeParameter('tradingTriggerPrice', i) as number;
+						const executionPrice = this.getNodeParameter(
+							'tradingExecutionPrice',
+							i,
+						) as number;
+						backendBody = {
+							market_index: marketIndex,
+							side: this.getNodeParameter('tradingSide', i) as string,
+							size: this.getNodeParameter('tradingSize', i) as number,
+							trigger_price: triggerPrice,
+							price: executionPrice || triggerPrice,
+							reduce_only: this.getNodeParameter('tradingReduceOnly', i) as boolean,
+						};
+					} else if (operation === 'createTPLimitOrder') {
+						backendEndpoint = '/api/order/tp-limit';
+						const triggerPrice = this.getNodeParameter('tradingTriggerPrice', i) as number;
+						const executionPrice = this.getNodeParameter(
+							'tradingExecutionPrice',
+							i,
+						) as number;
+						backendBody = {
+							market_index: marketIndex,
+							side: this.getNodeParameter('tradingSide', i) as string,
+							size: this.getNodeParameter('tradingSize', i) as number,
+							trigger_price: triggerPrice,
+							price: executionPrice || triggerPrice,
+							reduce_only: this.getNodeParameter('tradingReduceOnly', i) as boolean,
+						};
+					} else if (operation === 'createSLOrder') {
+						backendEndpoint = '/api/order/sl';
+						const triggerPrice = this.getNodeParameter('tradingTriggerPrice', i) as number;
+						const executionPrice = this.getNodeParameter(
+							'tradingExecutionPrice',
+							i,
+						) as number;
+						backendBody = {
+							market_index: marketIndex,
+							side: this.getNodeParameter('tradingSide', i) as string,
+							size: this.getNodeParameter('tradingSize', i) as number,
+							trigger_price: triggerPrice,
+							price: executionPrice || triggerPrice,
+							reduce_only: this.getNodeParameter('tradingReduceOnly', i) as boolean,
+						};
+					} else if (operation === 'createSLLimitOrder') {
+						backendEndpoint = '/api/order/sl-limit';
+						const triggerPrice = this.getNodeParameter('tradingTriggerPrice', i) as number;
+						const executionPrice = this.getNodeParameter(
+							'tradingExecutionPrice',
+							i,
+						) as number;
+						backendBody = {
+							market_index: marketIndex,
+							side: this.getNodeParameter('tradingSide', i) as string,
+							size: this.getNodeParameter('tradingSize', i) as number,
+							trigger_price: triggerPrice,
+							price: executionPrice || triggerPrice,
+							reduce_only: this.getNodeParameter('tradingReduceOnly', i) as boolean,
+						};
+					} else if (operation === 'createEntryWithBrackets') {
+						backendEndpoint = '/api/order/entry-with-brackets';
+						const takeProfits: IDataObject[] = [];
+
+						const tp1Price = this.getNodeParameter('tradingTP1Price', i) as number;
+						const tp1Percent = this.getNodeParameter('tradingTP1Percent', i) as number;
+						if (tp1Price > 0) {
+							takeProfits.push({ trigger_price: tp1Price, size_percent: tp1Percent });
+						}
+
+						const tp2Price = this.getNodeParameter('tradingTP2Price', i) as number;
+						const tp2Percent = this.getNodeParameter('tradingTP2Percent', i) as number;
+						if (tp2Price > 0) {
+							takeProfits.push({ trigger_price: tp2Price, size_percent: tp2Percent });
+						}
+
+						const tp3Price = this.getNodeParameter('tradingTP3Price', i) as number;
+						const tp3Percent = this.getNodeParameter('tradingTP3Percent', i) as number;
+						if (tp3Price > 0) {
+							takeProfits.push({ trigger_price: tp3Price, size_percent: tp3Percent });
+						}
+
+						const slPrice = this.getNodeParameter('tradingSLPrice', i) as number;
+
+						backendBody = {
+							market_index: marketIndex,
+							side: this.getNodeParameter('tradingSide', i) as string,
+							size: this.getNodeParameter('tradingSize', i) as number,
+							slippage: this.getNodeParameter('tradingSlippage', i) as number,
+							take_profits: takeProfits,
+							stop_loss: slPrice > 0 ? { trigger_price: slPrice } : {},
 						};
 					}
 

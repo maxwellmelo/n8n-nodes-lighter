@@ -15,6 +15,7 @@ This is an n8n community node for **Lighter (zkLighter)** - a high-performance p
 - **System Operations**: Status, info, announcements
 - **Trading Operations** (via Backend): Create/cancel orders, close positions, update leverage
 - **Position Operations** (via Backend): Get positions and active orders
+- **TP/SL Orders** (v0.3.2+): Take Profit and Stop Loss orders with bracket entries
 
 ### Lighter Trigger (WebSocket)
 Real-time data streaming via WebSocket:
@@ -129,6 +130,11 @@ After starting the backend, add the URL to your Lighter credentials:
 |-----------|-------------|
 | Create Limit Order | Place a limit order with specified price |
 | Create Market Order | Place a market order with slippage |
+| Create Take Profit Order | Place a TP order that triggers at specified price |
+| Create Take Profit Limit Order | Place a TP limit order with trigger price |
+| Create Stop Loss Order | Place a SL order that triggers at specified price |
+| Create Stop Loss Limit Order | Place a SL limit order with trigger price |
+| Create Entry with Brackets | Open position with TP1/TP2/TP3 and SL in one call |
 | Cancel Order | Cancel a specific order by index |
 | Cancel All Orders | Cancel all open orders |
 | Close Position | Close an open position with market order |
@@ -166,6 +172,22 @@ After starting the backend, add the URL to your Lighter credentials:
 2. Select **Channel**: Order Book
 3. Enter the **Market Index** (0 = ETH-USD)
 4. The trigger will emit events on every orderbook update
+
+### Create Entry with TP/SL (Brackets)
+1. Add the **Lighter** node to your workflow
+2. Select **Resource**: Trading
+3. Select **Operation**: Create Entry with Brackets
+4. Enter:
+   - **Market Index**: 0 (ETH-USD)
+   - **Side**: Buy or Sell
+   - **Size**: Order size (e.g., 0.1)
+   - **Slippage %**: 0.5
+   - **TP1 Price**: First take profit price (33% of position)
+   - **TP2 Price**: Second take profit price (33% of position)
+   - **TP3 Price**: Third take profit price (34% of position)
+   - **Stop Loss Price**: Stop loss trigger price
+
+This creates a market entry order along with 3 take profit orders and 1 stop loss order automatically.
 
 ## API Reference
 
