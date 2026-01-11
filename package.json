@@ -1,7 +1,7 @@
 {
 	"name": "n8n-nodes-lighter",
-	"version": "0.3.2",
-	"description": "n8n community node for Lighter (zkLighter) - A high-performance perpetuals DEX",
+	"version": "0.4.0",
+	"description": "n8n community node for Lighter (zkLighter) - A high-performance perpetuals DEX with AI Agent tools",
 	"keywords": [
 		"n8n-community-node-package",
 		"n8n",
@@ -11,7 +11,10 @@
 		"perpetuals",
 		"trading",
 		"crypto",
-		"defi"
+		"defi",
+		"ai-agent",
+		"langchain",
+		"ai-tools"
 	],
 	"license": "MIT",
 	"homepage": "https://github.com/maxwellmelo/n8n-nodes-lighter",
@@ -47,7 +50,11 @@
 		],
 		"nodes": [
 			"dist/nodes/Lighter/Lighter.node.js",
-			"dist/nodes/Lighter/LighterTrigger.node.js"
+			"dist/nodes/Lighter/LighterTrigger.node.js",
+			"dist/nodes/Lighter/LighterAccountTool.node.js",
+			"dist/nodes/Lighter/LighterMarketTool.node.js",
+			"dist/nodes/Lighter/LighterTradingTool.node.js",
+			"dist/nodes/Lighter/LighterPositionTool.node.js"
 		]
 	},
 	"devDependencies": {
@@ -65,6 +72,8 @@
 		"n8n-workflow": "*"
 	},
 	"dependencies": {
-		"ws": "^8.16.0"
+		"@langchain/core": "^0.3.0",
+		"ws": "^8.16.0",
+		"zod": "^3.23.0"
 	}
 }

@@ -23,6 +23,8 @@ export class Lighter implements INodeType {
 		},
 		inputs: ['main'],
 		outputs: ['main'],
+		// @ts-ignore - Enable this node to be used as an AI Agent tool
+		usableAsTool: true,
 		credentials: [
 			{
 				name: 'lighterApi',
