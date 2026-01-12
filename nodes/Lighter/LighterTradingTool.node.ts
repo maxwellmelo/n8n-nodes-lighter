@@ -5,6 +5,7 @@ import type {
 	SupplyData,
 	IDataObject,
 } from 'n8n-workflow';
+import { NodeConnectionTypes } from 'n8n-workflow';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 
@@ -33,10 +34,8 @@ export class LighterTradingTool implements INodeType {
 				],
 			},
 		},
-		// @ts-ignore - AI Tool output
 		inputs: [],
-		// @ts-ignore - AI Tool output
-		outputs: [NodeConnectionType.AiTool],
+		outputs: [NodeConnectionTypes.AiTool],
 		outputNames: ['Tool'],
 		credentials: [
 			{

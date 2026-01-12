@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-lighter",
-	"version": "0.4.0",
+	"version": "0.4.1",
 	"description": "n8n community node for Lighter (zkLighter) - A high-performance perpetuals DEX with AI Agent tools",
 	"keywords": [
 		"n8n-community-node-package",
